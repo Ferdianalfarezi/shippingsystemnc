@@ -1,0 +1,1 @@
+@include('kanbantmminsp2.print')

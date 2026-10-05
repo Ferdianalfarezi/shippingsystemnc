@@ -569,6 +569,11 @@
                             </a>
                         </li>
                         <li>
+                            <a class="dropdown-item" href="{{ route('kanbantmminsp2.index') }}">
+                                TMMIN P2
+                            </a>
+                        </li>
+                        <li>
                             <a class="dropdown-item" href="{{ route('kanbanhpms.index') }}">
                                 HPM
                             </a>

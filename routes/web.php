@@ -37,6 +37,7 @@ use App\Http\Controllers\KanbanHinoSplitController;
 use App\Http\Controllers\KanbanBankTgiController;
 use App\Http\Controllers\KanbanTgiSplitController;
 use App\Http\Controllers\AddressTgiController;
+use App\Http\Controllers\KanbanTmminsP2Controller;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -495,6 +496,22 @@ Route::post('/shipping-matrix/batch-save', [ShippingMatrixController::class, 'ba
     Route::delete('/address-tgi-delete-all', [\App\Http\Controllers\AddressTgiController::class, 'deleteAll'])->name('addresstgi.deleteAll');
     Route::post('/address-tgi/import', [\App\Http\Controllers\AddressTgiController::class, 'import'])->name('addresstgi.import');
 
+    Route::prefix('kanbantmminsp2')
+    ->name('kanbantmminsp2.')
+    ->controller(KanbanTmminsP2Controller::class)
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/by-dn', 'indexByDn')->name('indexByDn');
+        Route::post('/import', 'importTxt')->name('import');
+        Route::get('/print-all', 'printAll')->name('printall');
+        Route::get('/print-selected', 'printSelected')->name('printselected');
+        Route::get('/print-group', 'printGroup')->name('printgroup');
+        Route::get('/plant-counts', 'getPlantCounts')->name('plantcounts');
+        Route::get('/plant-counts-by-ids', 'getPlantCountsByIds')->name('plantcountsbyids');
+        Route::delete('/group/{manifest_no}', 'destroyGroup')->name('destroyGroup');
+        Route::get('/{id}/print', 'print')->name('print');
+        Route::delete('/{id}', 'destroy')->name('destroy');
+    });
 }); // end middleware auth
 
 require __DIR__.'/auth.php';

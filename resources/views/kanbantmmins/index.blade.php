@@ -25,6 +25,11 @@
         <!-- Right Side - Search & Menu -->
         <div class="d-flex align-items-center gap-2">
 
+            <!-- Schedule Cycle Button -->
+            <a href="{{ route('kbntmmin-schedule.index') }}" class="btn btn-outline-primary" title="Schedule Cycle">
+                <i class="bi bi-clock-history"></i>
+            </a>
+
             <div class="btn-group" role="group" aria-label="View toggle">
                 <a href="{{ route('kanbantmmins.index') }}" class="btn btn-secondary active" title="View All Items">
                     <i class="bi bi-list-ul"></i> All Items
@@ -113,7 +118,7 @@
                     <th>Address</th>
                     <th>PCS</th>
                     <th>Route</th>
-                    <th>Supplier</th>
+                    <th>Cycle</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -128,7 +133,7 @@
                         <td><strong>{{ $item->address }}</strong></td>
                         <td>{{ $item->pcs }}</td>
                         <td>{{ $item->route }}</td>
-                        <td>{{ Str::limit($item->supplier, 20) }}</td>
+                        <td>{{ $item->cycle }}</td>
                         <td>
                             <div class="d-flex justify-content-center p-1" style="gap: 0;">
                                 <a href="{{ route('kanbantmmins.print', $item->id) }}" class="btn btn-success btn-sm btn-action-square" style="border-radius: 6px 0 0 6px; margin: 0;" title="Print" target="_blank">

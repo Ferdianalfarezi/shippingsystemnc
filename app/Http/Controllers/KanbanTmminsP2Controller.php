@@ -319,12 +319,13 @@ class KanbanTmminsP2Controller extends Controller
 
     /**
      * "DST2 -M107" / "BUILD- OUT" -> "DST2 - M107" / "BUILD - OUT"
+     * Kosong -> null
      */
     private function formatPartAddress($value)
     {
         $value = preg_replace('/\s+/', ' ', trim((string) $value));
         if ($value === '') {
-            return 'UNKNOWN';
+            return null;
         }
         return preg_replace('/\s*-\s*/', ' - ', $value);
     }

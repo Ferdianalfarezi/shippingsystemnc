@@ -43,7 +43,11 @@
             $sequenceGroups = collect([
                 $groupKey($note) => \App\Models\KanbanTmminsP2::where('manifest_no', $note->manifest_no)
                     ->where('part_no', $note->part_no)
-                    ->where('part_address', $note->part_address)
+                    ->when(
+                        $note->part_address === null || $note->part_address === '',
+                        fn($q) => $q->where(fn($w) => $w->whereNull('part_address')->orWhere('part_address', '')),
+                        fn($q) => $q->where('part_address', $note->part_address)
+                    )
                     ->get(),
             ]);
         } else {
@@ -73,16 +77,16 @@
 
     <style>
         /*
-         * Skala print untuk kertas 200mm x 80mm.
+         * Ukuran disamakan dengan print TMMIN (kanbantmmins/print): 794 x 283, margin kiri 15px, atas 5px.
          * Kalau ganti printer/kertas dan perlu fine-tune, ubah angka --print-scale saja.
          * Di dialog print: Scale = Default / Actual size (100%).
          */
         :root {
-            --print-scale: 0.93;
-            --kanban-w: 794px;     /* lebar desain kanban */
-            --kanban-h: 338px;     /* tinggi desain kanban (794 x 850/2000) */
-            --offset-x: 25px;      /* geser kanan */
-            --offset-y: 5px;       /* geser bawah */
+            --print-scale: 1;
+            --kanban-w: 794px;     /* lebar kanban (sama dengan TMMIN) */
+            --kanban-h: 283px;     /* tinggi kanban (sama dengan TMMIN) */
+            --offset-x: 15px;      /* geser kanan (sama dengan TMMIN) */
+            --offset-y: 5px;       /* geser bawah (sama dengan TMMIN) */
         }
 
         @page { margin: 0; }
@@ -153,7 +157,7 @@
             color: #000;
         }
 
-        .f-supplier-code { font-size: 30px; }
+        .f-supplier-code { font-size: 22px; }
         .f-date          { font-size: 13px; font-weight: normal; }
         .f-route         { font-size: 45px; }
         .f-cycle         { font-size: 50px; }
@@ -178,7 +182,7 @@
         .f-keterangan span {
             writing-mode: vertical-lr;
             transform: rotate(180deg);
-            font-size: 15px;
+            font-size: 12px;
             white-space: nowrap;
         }
 
@@ -303,7 +307,7 @@
                 <div class="f f-order" style="--x:1032; --y:669; --w:423; --h:137;">{!! $orderHtml !!}</div>
 
                 {{-- PART ADDRESS --}}
-                <div class="f f-part-address" style="--x:1529; --y:669; --w:433; --h:137;">{{ $item->part_address ?? '-' }}</div>
+                <div class="f f-part-address" style="--x:1529; --y:669; --w:433; --h:137;">{{ $item->part_address ?? '' }}</div>
             </div>
         </div>
 
@@ -335,8 +339,8 @@
                 try {
                     new QRCode(div, {
                         text: div.dataset.qr || 'NO-QR',
-                        width: 60,
-                        height: 60,
+                        width: 52,
+                        height: 52,
                         colorDark: '#000000',
                         colorLight: '#ffffff',
                         correctLevel: QRCode.CorrectLevel.L

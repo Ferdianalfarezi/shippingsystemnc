@@ -38,6 +38,9 @@ use App\Http\Controllers\KanbanBankTgiController;
 use App\Http\Controllers\KanbanTgiSplitController;
 use App\Http\Controllers\AddressTgiController;
 use App\Http\Controllers\KanbanTmminsP2Controller;
+use App\Http\Controllers\KbntmminScheduleController;
+use App\Http\Controllers\KanbanTmminsAutoPrintController;
+
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -76,6 +79,18 @@ Route::prefix('andon')->name('andon.')->group(function () {
     Route::get('/deliveries',        [DeliveryController::class,    'andon'])        ->name('deliveries');
     Route::get('/deliveries/group',  [DeliveryController::class,    'andonReverse']) ->name('deliveries.group');
     Route::get('/milkruns',          [MilkrunController::class,     'andon'])        ->name('milkruns');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Auto Print Kanban TMMIN (public, no auth — diamankan pakai AUTO_PRINT_TOKEN)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('kanbantmmins/auto-print')->name('kanbantmmins.autoprint.')->group(function () {
+    Route::get('/monitor',       [KanbanTmminsAutoPrintController::class, 'monitor'])    ->name('monitor');
+    Route::get('/check',         [KanbanTmminsAutoPrintController::class, 'check'])      ->name('check');
+    Route::get('/print',         [KanbanTmminsAutoPrintController::class, 'print'])      ->name('print');
+    Route::post('/mark-printed', [KanbanTmminsAutoPrintController::class, 'markPrinted'])->name('mark');
 });
 
 /*
@@ -137,7 +152,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('lp-configs/batch-save', [LpConfigController::class, 'batchSave'])->name('lp-configs.batch-save');
 
     Route::get('/shipping-matrix', [ShippingMatrixController::class, 'index'])->name('shipping-matrix.index');
-Route::post('/shipping-matrix/batch-save', [ShippingMatrixController::class, 'batchSave'])->name('shipping-matrix.batch-save');
+    Route::post('/shipping-matrix/batch-save', [ShippingMatrixController::class, 'batchSave'])->name('shipping-matrix.batch-save');
 
     /*
     |----------------------------------------------------------------------
@@ -270,6 +285,19 @@ Route::post('/shipping-matrix/batch-save', [ShippingMatrixController::class, 'ba
             ->where('manifest_no', '.*')
             ->name('destroygroup');
         Route::delete('/{id}',       [KanbanTmminsController::class, 'destroy'])          ->name('destroy');
+    });
+
+    /*
+    |----------------------------------------------------------------------
+    | Master Jadwal Cycle Kanban TMMIN (untuk auto print)
+    |----------------------------------------------------------------------
+    */
+    Route::prefix('kbntmmin-schedule')->name('kbntmmin-schedule.')->group(function () {
+        Route::get('/',            [KbntmminScheduleController::class, 'index'])     ->name('index');
+        Route::post('/',           [KbntmminScheduleController::class, 'store'])     ->name('store');
+        Route::delete('/log/{id}', [KbntmminScheduleController::class, 'destroyLog'])->name('destroy-log');
+        Route::put('/{id}',        [KbntmminScheduleController::class, 'update'])    ->name('update');
+        Route::delete('/{id}',     [KbntmminScheduleController::class, 'destroy'])   ->name('destroy');
     });
 
     /*
@@ -495,6 +523,22 @@ Route::post('/shipping-matrix/batch-save', [ShippingMatrixController::class, 'ba
     Route::delete('/address-tgi/{addressTgi}', [\App\Http\Controllers\AddressTgiController::class, 'destroy'])->name('addresstgi.destroy');
     Route::delete('/address-tgi-delete-all', [\App\Http\Controllers\AddressTgiController::class, 'deleteAll'])->name('addresstgi.deleteAll');
     Route::post('/address-tgi/import', [\App\Http\Controllers\AddressTgiController::class, 'import'])->name('addresstgi.import');
+
+    Route::get('/address-inoac', [\App\Http\Controllers\AddressInoacController::class, 'index'])->name('addressinoac.index');
+    Route::post('/address-inoac', [\App\Http\Controllers\AddressInoacController::class, 'store'])->name('addressinoac.store');
+    Route::get('/address-inoac/{addressInoac}/edit', [\App\Http\Controllers\AddressInoacController::class, 'edit'])->name('addressinoac.edit');
+    Route::put('/address-inoac/{addressInoac}', [\App\Http\Controllers\AddressInoacController::class, 'update'])->name('addressinoac.update');
+    Route::delete('/address-inoac/{addressInoac}', [\App\Http\Controllers\AddressInoacController::class, 'destroy'])->name('addressinoac.destroy');
+    Route::delete('/address-inoac-delete-all', [\App\Http\Controllers\AddressInoacController::class, 'deleteAll'])->name('addressinoac.deleteAll');
+    Route::post('/address-inoac/import', [\App\Http\Controllers\AddressInoacController::class, 'import'])->name('addressinoac.import');
+
+    Route::prefix('kanban-inoac-split')->name('kanban-inoac-split.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\KanbanInoacSplitController::class, 'index'])->name('index');
+        Route::post('/process', [\App\Http\Controllers\KanbanInoacSplitController::class, 'process'])->name('process');
+        Route::get('/recent', [\App\Http\Controllers\KanbanInoacSplitController::class, 'recent'])->name('recent');
+        Route::get('/{token}/labels-meta', [\App\Http\Controllers\KanbanInoacSplitController::class, 'labelsMeta'])->name('labels-meta');
+        Route::get('/{token}/download', [\App\Http\Controllers\KanbanInoacSplitController::class, 'download'])->name('download');
+    });
 
     Route::prefix('kanbantmminsp2')
     ->name('kanbantmminsp2.')

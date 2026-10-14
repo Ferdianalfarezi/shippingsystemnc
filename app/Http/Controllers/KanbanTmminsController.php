@@ -994,8 +994,25 @@ class KanbanTmminsController extends Controller
      */
     private function extractCycle($d1, $route)
     {
-        $cycleColumnIndex = array_search($route, $d1) + 1;
-        return isset($d1[$cycleColumnIndex]) ? trim($d1[$cycleColumnIndex]) : 'UNKNOWN';
+        if ($route === 'UNKNOWN') {
+            return 'UNKNOWN';
+        }
+
+        $routeIndex = null;
+        foreach ($d1 as $index => $value) {
+            if (trim($value) === $route) {
+                $routeIndex = $index;
+                break;
+            }
+        }
+
+        if ($routeIndex === null || !isset($d1[$routeIndex + 1])) {
+            return 'UNKNOWN';
+        }
+
+        $cycle = trim($d1[$routeIndex + 1]);
+
+        return $cycle !== '' ? $cycle : 'UNKNOWN';
     }
 
     /**

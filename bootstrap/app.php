@@ -18,6 +18,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => \App\Http\Middleware\Authenticate::class,
             'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
             'check.expired' => CheckSystemExpired::class,
+            
+        ]);
+
+        // Endpoint auto print kiosk tidak pakai CSRF (diamankan pakai AUTO_PRINT_TOKEN),
+        // karena halaman kiosk dibuka berhari-hari dan session/CSRF pasti expired.
+        $middleware->validateCsrfTokens(except: [
+            'kanbantmmins/auto-print/*',
         ]);
         
         $middleware->redirectGuestsTo('/login');

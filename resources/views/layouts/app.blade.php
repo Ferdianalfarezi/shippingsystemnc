@@ -618,6 +618,12 @@
                                 TGI
                             </a>
                         </li>
+
+                        <li>
+                            <a class="dropdown-item" href="{{ route('kanban-inoac-split.index') }}">
+                                INOAC
+                            </a>
+                        </li>
                     </ul>
                 </div>
                 @if(auth()->user()->role === 'superadmin')
@@ -668,6 +674,10 @@
 
                             <a href="{{ route('addresstgi.index') }}" class="fs-6">
                                 <i class="fas fa-address-book"></i> TGI Address
+                            </a>
+
+                            <a href="{{ route('addressinoac.index') }}" class="fs-6">
+                                <i class="fas fa-address-book"></i> INOAC Address
                             </a>
 
                             <a href="{{ route('kanbanbanktgi.index') }}" class="fs-6">

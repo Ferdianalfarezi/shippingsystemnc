@@ -6,6 +6,10 @@ use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+})->purpose('Display an inspiring quote')->hourly();
 
-Schedule::command('kanbanhpm:purge-expired')->dailyAt('00:05');
+// Auto print kanban TMMIN per cycle
+// Schedule::command('kanban:tmmin-auto-print')
+//     ->everyMinute()
+//     ->withoutOverlapping(10)
+//     ->appendOutputTo(storage_path('logs/autoprint.log'));

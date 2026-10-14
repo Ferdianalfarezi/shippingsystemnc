@@ -315,9 +315,16 @@
                     <label class="form-label fw-bold">Shipping</label>
                     <select class="form-select mb-3" id="shippingAddressSelect">
                         <option value="">-- Pilih Shipping --</option>
-                        @for($i = 1; $i <= 10; $i++)
-                            <option value="Shipping {{ $i }}">Shipping {{ $i }}</option>
-                        @endfor
+                        <optgroup label="Shipping">
+                            @for($i = 1; $i <= 13; $i++)
+                                <option value="Shipping {{ $i }}">Shipping {{ $i }}</option>
+                            @endfor
+                        </optgroup>
+                        <optgroup label="Shipping Export">
+                            @for($i = 1; $i <= 3; $i++)
+                                <option value="Shipping Export {{ $i }}">Shipping Export {{ $i }}</option>
+                            @endfor
+                        </optgroup>
                     </select>
 
                     <button type="button" class="btn btn-success w-100" id="confirmPrShippingBtn">

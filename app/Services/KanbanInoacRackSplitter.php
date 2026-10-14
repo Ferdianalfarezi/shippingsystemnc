@@ -54,16 +54,17 @@ class KanbanInoacRackSplitter
     protected bool $sortRackDesc = true;
 
     // ============================================================
-    // OVERLAY RACK NO — area kosong di bawah baris "Location - Dock",
-    // kiri dari teks "1 of 4". Fraksi (0-1) relatif ke kotak label.
+    // OVERLAY RACK NO — kotak ber-border di area kosong bawah baris
+    // "Location - Dock". Fraksi (0-1) relatif ke kotak label.
+    // X = 0.0349 -> pas sejajar tepi kiri baris tabel di atasnya.
+    // Y = titik tengah vertikal kotak. Lebar kotak ngikutin panjang teks.
     // ============================================================
-    protected float $overlayXFraction = 0.04;
-    protected float $overlayYFraction = 0.665;
-    protected float $overlayWidthFraction = 0.46;
-    protected float $overlayHeightFraction = 0.12;
-    protected float $overlayFontSize = 26;
+    protected float $overlayXFraction = 0.0349;
+    protected float $overlayYCenterFraction = 0.725;
+    protected float $overlayFontSize = 15;
     protected string $overlayFont = 'helvetica';
-    protected string $overlayAlign = 'C';
+    protected float $overlayPaddingXPt = 5;
+    protected float $overlayBorderWidthPt = 1;
 
     protected const MM_TO_PT = 72 / 25.4;
 
@@ -337,12 +338,20 @@ class KanbanInoacRackSplitter
     {
         $pdf->SetFont($this->overlayFont, 'B', $this->overlayFontSize);
         $pdf->SetTextColor(0, 0, 0);
-        $pdf->SetXY($labelX + $this->overlayXFraction * $labelW, $labelY + $this->overlayYFraction * $labelH);
-        $pdf->Cell(
-            $this->overlayWidthFraction * $labelW,
-            $this->overlayHeightFraction * $labelH,
-            $rackNo, 0, 0, $this->overlayAlign, false, '', 1, false, 'T', 'M'
+        $pdf->SetDrawColor(0, 0, 0);
+        $pdf->SetLineWidth($this->overlayBorderWidthPt);
+        $pdf->setCellPaddings($this->overlayPaddingXPt, 0, $this->overlayPaddingXPt, 0);
+
+        $w = $pdf->GetStringWidth($rackNo) + 2 * $this->overlayPaddingXPt;
+        $h = $this->overlayFontSize * 1.4;
+
+        $pdf->SetXY(
+            $labelX + $this->overlayXFraction * $labelW,
+            $labelY + $this->overlayYCenterFraction * $labelH - $h / 2
         );
+        $pdf->Cell($w, $h, $rackNo, 1, 0, 'C', false, '', 0, false, 'T', 'M');
+
+        $pdf->setCellPaddings(0, 0, 0, 0);
     }
 
     /**

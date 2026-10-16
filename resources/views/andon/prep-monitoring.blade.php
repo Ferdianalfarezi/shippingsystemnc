@@ -127,15 +127,15 @@
                     <th rowspan="2">Dock</th>
                     <th rowspan="2">Route</th>
                     <th colspan="2">QTY</th>
-                    <th colspan="3">Time</th>
+                    <th colspan="2">Time Start</th>
+                    <th rowspan="2">ETD</th>
                     <th colspan="21">Status</th>
                 </tr>
                 <tr class="fs-6">
                     <th>Kbn</th>
                     <th>Skid</th>
-                    <th>Start Prep</th>
-                    <th>Start Ship</th>
-                    <th>ETD</th>
+                    <th>Prep</th>
+                    <th>Ship</th>
                     <th>Pr 1</th>
                     <th>Pr 2</th>
                     <th>Pr 3</th>

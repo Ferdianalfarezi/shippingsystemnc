@@ -112,6 +112,13 @@
 
     <!-- Table -->
     <div class="table-responsive p-0 mt-0">
+        <style>
+            #monitoringTable tr.row-delay > td {
+                background-color: #dc3545 !important;
+                color: #fff !important;
+                font-weight: bold;
+            }
+        </style>
         <table class="table table-bordered table-compact w-100 mt-1 text-center align-middle" id="monitoringTable">
             <thead>
                 <tr class="fs-6">
@@ -121,7 +128,7 @@
                     <th rowspan="2">Route</th>
                     <th colspan="2">QTY</th>
                     <th colspan="3">Time</th>
-                    <th colspan="15">Status</th>
+                    <th colspan="21">Status</th>
                 </tr>
                 <tr class="fs-6">
                     <th>Kbn</th>
@@ -143,31 +150,34 @@
                     <th>S-8</th>
                     <th>S-9</th>
                     <th>S-10</th>
+                    <th>S-11</th>
+                    <th>S-12</th>
+                    <th>S-13</th>
+                    <th style="border-left: 5px solid #000 !important;">EX-1</th>
+                    <th>EX-2</th>
+                    <th>EX-3</th>
                     <th>Delivery</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($rows as $row)
                     @php
-                        // Kolom S-1..S-10 cuma keisi teksnya kalau shipping_address-nya persis "Shipping N" (1-10).
-                        $shipIndex = null;
-                        if (preg_match('/^Shipping (\d+)$/i', trim($row->shipping_address), $m)) {
-                            $n = (int) $m[1];
-                            if ($n >= 1 && $n <= 10) $shipIndex = $n;
+                        // Kolom S-1..S-13 = "Shipping N", EX-1..EX-3 = "Shipping Export N".
+                        // Cuma keisi teksnya kalau shipping_address-nya persis salah satu dari itu.
+                        $shipKey = null;
+                        if (preg_match('/^Shipping (Export )?(\d+)$/i', trim((string) $row->shipping_address), $m)) {
+                            $n = (int) $m[2];
+                            $isExport = $m[1] !== '';
+                            if ($isExport && $n >= 1 && $n <= 3) $shipKey = 'EX-' . $n;
+                            if (!$isExport && $n >= 1 && $n <= 13) $shipKey = 'S-' . $n;
                         }
                         $progressText = $row->status === 'ok' ? 'OK' : ($row->pr_count . ' / ' . $row->skid);
 
-                        // Section Pr: hijau kalau OK, kuning (teks hitam) kalau masih progress
-                        $prClass = $row->status === 'ok'
-                            ? 'bg-success text-white fw-bold'
-                            : 'bg-warning text-dark fw-bold';
-
-                        // Section Shipping: MERAH kalau full/OK, kuning (teks hitam) kalau masih progress
-                        $shipClass = $row->status === 'ok'
-                            ? 'bg-danger text-white fw-bold'
-                            : 'bg-warning text-dark fw-bold';
+                        // Section Pr & Shipping polos (teks hitam). Baris baru merah kalau Delivery = Delay.
+                        $prClass = '';
+                        $shipClass = '';
                     @endphp
-                    <tr class="fs-6">
+                    <tr class="fs-6 {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
                         <td>{{ $row->customers }}</td>
                         <td>{{ $row->cycle }}</td>
                         <td>{{ $row->dock }}</td>
@@ -186,22 +196,22 @@
                         @endfor
 
                         {{-- Seluruh section Shipping diwarnai sama (bukan cuma kolom aktif) --}}
-                        @for($i = 1; $i <= 10; $i++)
-                            <td class="{{ $shipClass }}" @if($i === 1) style="border-left: 4px solid #000 !important;" @endif>
-                                {{ $shipIndex === $i ? $progressText : '-' }}
+                        @foreach(array_merge(array_map(fn ($i) => 'S-' . $i, range(1, 13)), ['EX-1', 'EX-2', 'EX-3']) as $key)
+                            <td class="{{ $shipClass }}" @if($key === 'S-1' || $key === 'EX-1') style="border-left: 4px solid #000 !important;" @endif>
+                                {{ $shipKey === $key ? $progressText : '-' }}
                             </td>
-                        @endfor
+                        @endforeach
 
-                        <td class="{{ $row->milkrun ? $row->milkrun->status_badge . ' fw-bold' : '' }}">
-                            {{ $row->milkrun ? $row->milkrun->status_label : '-' }}
+                        <td class="fw-bold" title="{{ $row->delivery_target ? 'Delivery: ' . $row->delivery_target->format('d/m H:i') : '' }}">
+                            {{ $row->delivery_label }}
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="21" class="text-center py-4">
+                        <td colspan="30" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-                                <p class="mt-2">Belum ada data monitoring</p>
+                                <p class="mt-2">Semua data sudah diambil milkrun</p>
                             </div>
                         </td>
                     </tr>

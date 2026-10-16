@@ -8,6 +8,8 @@ use App\Models\Shipping;
 use App\Models\ShippingMatrix;
 use Illuminate\Http\Request;
 use App\Models\Milkrun;
+use App\Models\Delivery;
+use App\Models\History;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -15,44 +17,81 @@ class PrepMonitoringController extends Controller
 {
     public function index(Request $request)
     {
-        // Default: tanggal hari ini. Kalau date_from dikirim tapi date_to kosong -> single date.
-        // Kalau dua-duanya dikirim -> range.
-        $dateFrom = $request->filled('date_from')
-            ? Carbon::parse($request->get('date_from'))->format('Y-m-d')
-            : Carbon::today()->format('Y-m-d');
+        // Gak ada filter tanggal lagi: yang tampil cuma yang BELUM diambil milkrun.
+        $rows = $this->pendingRows();
 
-        $dateTo = $request->filled('date_to')
-            ? Carbon::parse($request->get('date_to'))->format('Y-m-d')
-            : $dateFrom;
+        $totalOnProgress = $rows->where('status', 'in_progress')->count();
+        $totalClosed     = $rows->where('status', 'ok')->count();
 
-        // Jaga-jaga kalau user kebalik masukin from > to
-        if ($dateFrom > $dateTo) {
-            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
-        }
+        return view('prep-monitoring.index', compact('rows', 'totalOnProgress', 'totalClosed'));
+    }
 
-        $rows = PrepMonitoring::whereBetween('group_date', [$dateFrom, $dateTo])
-            ->orderBy('created_at', 'desc')
-            ->get();
+    /**
+     * Semua row monitoring yang BELUM diambil milkrun, sudah ditempel status Delivery.
+     * Row hilang dari tabel begitu SEMUA DN-nya sudah diambil, yaitu:
+     * - masuk tabel milkruns (no_dns), ATAU
+     * - sudah scan to delivery (ada di Delivery / History). Milkrun cuma dibikin
+     *   kalau shipping-nya punya arrival, jadi banyak DN yang udah jalan tapi
+     *   gak pernah tercatat di milkruns.
+     */
+    private function pendingRows()
+    {
+        $rows = PrepMonitoring::orderBy('created_at', 'desc')->get();
 
-        // Satu query Milkrun buat semua row, DIPERSEMPIT dulu pakai delivery_date
-        // (lihat buildMilkrunLookup) sebelum kena JSON_CONTAINS - jauh lebih cepat
-        // daripada scan seluruh tabel Milkrun.
-        $milkrunMap = $this->buildMilkrunLookup(
-            $rows->pluck('scanned_dns')->filter()->flatten()->unique()->values()->all(),
-            $dateFrom,
-            $dateTo
+        $lookup = $this->buildDeliveryLookup(
+            $rows->pluck('scanned_dns')->filter()->flatten()->unique()->values()->all()
         );
 
-        foreach ($rows as $row) {
-            $row->milkrun = $this->matchMilkrun($row->scanned_dns ?? [], $milkrunMap);
+        $taken = $this->buildMilkrunDnSet($rows);
+        foreach ($lookup as $dn => $info) {
+            if ($info['scanned_at']) {
+                $taken[$dn] = true;
+            }
         }
 
-        $totalOnProgress = PrepMonitoring::whereBetween('group_date', [$dateFrom, $dateTo])
-            ->where('status', 'in_progress')->count();
-        $totalClosed = PrepMonitoring::whereBetween('group_date', [$dateFrom, $dateTo])
-            ->where('status', 'ok')->count();
+        $rows = $rows->filter(function ($row) use ($taken) {
+            $dns = $row->scanned_dns ?? [];
+            if (empty($dns)) {
+                return true;
+            }
+            foreach ($dns as $dn) {
+                if (!isset($taken[$dn])) {
+                    return true; // masih ada DN yang belum diambil milkrun
+                }
+            }
+            return false;
+        })->values();
 
-        return view('prep-monitoring.index', compact('rows', 'totalOnProgress', 'totalClosed', 'dateFrom', 'dateTo'));
+        $this->attachDeliveryStatus($rows, $lookup);
+
+        return $rows;
+    }
+
+    /**
+     * Set [no_dn => true] dari DN yang sudah masuk tabel milkruns.
+     * Dipersempit pakai delivery_date (mulai 3 hari sebelum group_date tertua)
+     * biar gak scan seluruh tabel milkruns.
+     */
+    private function buildMilkrunDnSet($rows): array
+    {
+        $oldest = $rows->pluck('group_date')->filter()->min();
+        if (!$oldest) {
+            return [];
+        }
+
+        $set = [];
+        $noDnsList = Milkrun::query()->toBase()
+            ->where('delivery_date', '>=', Carbon::parse($oldest)->subDays(3)->format('Y-m-d'))
+            ->whereNotNull('no_dns')
+            ->pluck('no_dns');
+
+        foreach ($noDnsList as $json) {
+            foreach ((json_decode((string) $json, true) ?: []) as $dn) {
+                $set[$dn] = true;
+            }
+        }
+
+        return $set;
     }
 
     /**
@@ -499,42 +538,129 @@ class PrepMonitoringController extends Controller
         }
     }
 
+    /** Lebih cepat dari jadwal lebih dari ini (menit) = Advance */
+    private const DELIVERY_ADVANCE_MINUTES = 15;
+
     /**
-     * Ambil semua Milkrun yang match salah satu DN dari daftar $dns dalam SATU query,
-     * terus bikin lookup map [no_dn => Milkrun].
+     * Status kolom Delivery per row, TANPA tabel milkruns. Acuannya:
+     * - Target = delivery_date + delivery_time dari DN.
+     * - Scan   = scan_to_delivery (DN sudah dipindah ke Delivery / History).
      *
-     * Kalau $dateFrom/$dateTo dikasih, query dipersempit dulu pakai kolom delivery_date
-     * (dikasih buffer ±1 hari) SEBELUM kena JSON_CONTAINS - jauh lebih murah daripada
-     * scan seluruh tabel Milkrun, karena delivery_date gampang difilter sedangkan
-     * JSON_CONTAINS di kolom no_dns gak bisa pakai index.
+     * Sudah scan semua DN:
+     *   scan > target                 -> delay
+     *   scan < target - 15 menit      -> advance
+     *   selain itu                    -> on_time
+     * Belum scan (semua):
+     *   sekarang > target             -> delay
+     *   selain itu                    -> pending
+     *
+     * Hasil ditempel ke row: delivery_status, delivery_label, delivery_target.
      */
-    private function buildMilkrunLookup(array $dns, ?string $dateFrom = null, ?string $dateTo = null): array
+    private function attachDeliveryStatus($rows, ?array $lookup = null): void
+    {
+        if ($lookup === null) {
+            $dns = $rows->pluck('scanned_dns')->filter()->flatten()->unique()->values()->all();
+            $lookup = $this->buildDeliveryLookup($dns);
+        }
+        $now = Carbon::now();
+
+        foreach ($rows as $row) {
+            $targets = [];
+            $scans = [];
+            $allScanned = true;
+
+            foreach (($row->scanned_dns ?? []) as $dn) {
+                if (!isset($lookup[$dn])) {
+                    continue;
+                }
+                if ($lookup[$dn]['target']) {
+                    $targets[] = $lookup[$dn]['target'];
+                }
+                if ($lookup[$dn]['scanned_at']) {
+                    $scans[] = $lookup[$dn]['scanned_at'];
+                } else {
+                    $allScanned = false;
+                }
+            }
+
+            $target = empty($targets) ? null : min($targets);
+            $status = 'pending';
+
+            if ($target) {
+                if ($allScanned && !empty($scans)) {
+                    $scannedAt = max($scans);
+                    if ($scannedAt->greaterThan($target)) {
+                        $status = 'delay';
+                    } elseif ($scannedAt->lessThan($target->copy()->subMinutes(self::DELIVERY_ADVANCE_MINUTES))) {
+                        $status = 'advance';
+                    } else {
+                        $status = 'on_time';
+                    }
+                } elseif ($now->greaterThan($target)) {
+                    $status = 'delay';
+                }
+            }
+
+            $row->delivery_status = $status;
+            $row->delivery_target = $target;
+            $row->delivery_label = match ($status) {
+                'delay'   => 'Delay',
+                'advance' => 'Advance',
+                'on_time' => 'On Time',
+                default   => '-',
+            };
+        }
+    }
+
+    /**
+     * Lookup [no_dn => ['target' => ?Carbon, 'scanned_at' => ?Carbon]] dari semua tahap DN.
+     * History/Delivery = sudah scan to delivery; Shipping/Preparation = belum.
+     */
+    private function buildDeliveryLookup(array $dns): array
     {
         if (empty($dns)) {
             return [];
         }
 
-        $query = Milkrun::query();
-
-        if ($dateFrom && $dateTo) {
-            $query->whereBetween('delivery_date', [
-                Carbon::parse($dateFrom)->subDay()->format('Y-m-d'),
-                Carbon::parse($dateTo)->addDay()->format('Y-m-d'),
-            ]);
-        }
-
-        $milkruns = $query->where(function ($q) use ($dns) {
-            foreach ($dns as $dn) {
-                $q->orWhereJsonContains('no_dns', $dn);
-            }
-        })->get();
-
         $map = [];
-        foreach ($milkruns as $milkrun) {
-            foreach (($milkrun->no_dns ?? []) as $dn) {
-                // kalau 1 DN kebetulan ada di >1 milkrun, yang pertama menang
-                if (!isset($map[$dn])) {
-                    $map[$dn] = $milkrun;
+        $sources = [
+            [History::class, true],
+            [Delivery::class, true],
+            [Shipping::class, false],
+            [Preparation::class, false],
+        ];
+
+        foreach ($sources as [$model, $hasScan]) {
+            $remaining = array_values(array_diff($dns, array_keys($map)));
+            if (empty($remaining)) {
+                break;
+            }
+
+            $columns = ['no_dn', 'delivery_date', 'delivery_time'];
+            if ($hasScan) {
+                $columns[] = 'scan_to_delivery';
+            }
+
+            foreach (array_chunk($remaining, 500) as $chunk) {
+                // toBase(): skip model event (Shipping auto-save status di event retrieved)
+                foreach ($model::query()->toBase()->whereIn('no_dn', $chunk)->get($columns) as $r) {
+                    if (isset($map[$r->no_dn])) {
+                        continue;
+                    }
+
+                    $target = null;
+                    if ($r->delivery_date) {
+                        try {
+                            $target = Carbon::parse(substr((string) $r->delivery_date, 0, 10) . ' ' . ($r->delivery_time ?: '00:00:00'));
+                        } catch (\Throwable $e) {
+                            $target = null;
+                        }
+                    }
+
+                    $map[$r->no_dn] = [
+                        'target'     => $target,
+                        'scanned_at' => ($hasScan && $r->scan_to_delivery) ? Carbon::parse($r->scan_to_delivery) : null,
+                    ];
                 }
             }
         }
@@ -542,44 +668,12 @@ class PrepMonitoringController extends Controller
         return $map;
     }
 
-    /**
-     * Cari Milkrun buat satu row PrepMonitoring dari lookup map yang udah dibuat
-     * buildMilkrunLookup(), tanpa query tambahan ke DB.
-     */
-    private function matchMilkrun(array $noDns, array $milkrunMap): ?Milkrun
-    {
-        foreach ($noDns as $dn) {
-            if (isset($milkrunMap[$dn])) {
-                return $milkrunMap[$dn];
-            }
-        }
-
-        return null;
-    }
-
     public function andon()
     {
-        $rows = PrepMonitoring::orderBy('created_at', 'desc')->get();
+        $rows = $this->pendingRows();
 
-        // Andon nggak ada filter tanggal manual, jadi ambil rentang tanggal dari
-        // group_date row yang ke-load, biar buildMilkrunLookup tetep bisa mempersempit
-        // scan Milkrun-nya (daripada scan seluruh tabel Milkrun tanpa batas).
-        $groupDates = $rows->pluck('group_date')->filter()->unique();
-        $dateFrom   = $groupDates->min();
-        $dateTo     = $groupDates->max();
-
-        $milkrunMap = $this->buildMilkrunLookup(
-            $rows->pluck('scanned_dns')->filter()->flatten()->unique()->values()->all(),
-            $dateFrom,
-            $dateTo
-        );
-
-        foreach ($rows as $row) {
-            $row->milkrun = $this->matchMilkrun($row->scanned_dns ?? [], $milkrunMap);
-        }
-
-        $totalOnProgress = PrepMonitoring::where('status', 'in_progress')->count();
-        $totalClosed     = PrepMonitoring::where('status', 'ok')->count();
+        $totalOnProgress = $rows->where('status', 'in_progress')->count();
+        $totalClosed     = $rows->where('status', 'ok')->count();
 
         $recentCompleted = PrepMonitoring::where('status', 'ok')
             ->orderBy('start_ship_at', 'desc')

@@ -9,7 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 // Auto print kanban TMMIN per cycle
-// Schedule::command('kanban:tmmin-auto-print')
-//     ->everyMinute()
-//     ->withoutOverlapping(10)
-//     ->appendOutputTo(storage_path('logs/autoprint.log'));
+Schedule::command('kanban:tmmin-auto-print')
+    ->everyMinute()
+    ->withoutOverlapping(15)
+    ->appendOutputTo(storage_path('logs/autoprint.log'));

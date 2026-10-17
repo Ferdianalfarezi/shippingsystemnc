@@ -139,6 +139,7 @@ class KanbanTmminAutoPrint extends Command
             . route('kanbantmmins.autoprint.print', [
                 'token' => config('services.auto_print.token'),
                 'ids' => $ids,
+                'pdf' => 1,
             ], false);
 
         $result = Process::timeout(120)->run([
@@ -173,7 +174,8 @@ class KanbanTmminAutoPrint extends Command
             throw new RuntimeException("SumatraPDF tidak ditemukan di: {$sumatra}");
         }
 
-        $result = Process::timeout(120)->run([
+        // Driver SATO bisa >2 menit untuk spool beberapa label
+        $result = Process::timeout(600)->run([
             $sumatra,
             '-print-to', $printer,
             '-print-settings', config('services.auto_print.sumatra_settings', 'noscale'),

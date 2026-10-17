@@ -114,7 +114,17 @@ class KanbanTmminsAutoPrintController extends Controller
             'plant' => 'all',
         ]);
 
-        return app(KanbanTmminsController::class)->printSelected($printRequest);
+        $response = app(KanbanTmminsController::class)->printSelected($printRequest);
+
+        // Mode PDF (dipakai command kanban:tmmin-auto-print): paksa ukuran halaman
+        // supaya PDF pas dengan kanban, bukan Letter. Kiosk tidak kirim pdf=1.
+        $pageSize = config('services.auto_print.page_size');
+        if ($request->boolean('pdf') && $pageSize && $response instanceof \Illuminate\Contracts\View\View) {
+            $style = '<style>@page { size: ' . e($pageSize) . '; margin: 0; }</style>';
+            return response(str_replace('</head>', $style . '</head>', $response->render()));
+        }
+
+        return $response;
     }
 
     /**

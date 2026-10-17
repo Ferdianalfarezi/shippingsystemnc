@@ -47,6 +47,9 @@ return [
         // noscale | fit | shrink (bisa ditambah, misal "noscale,paper=A4")
         'sumatra_settings' => env('AUTO_PRINT_SUMATRA_SETTINGS', 'noscale'),
 
+        // ukuran halaman PDF (CSS @page size), kosong = default Chrome (Letter)
+        'page_size' => env('AUTO_PRINT_PAGE_SIZE', '219mm 79mm'),
+
         // berapa hari file PDF hasil auto print disimpan
         'keep_pdf_days' => (int) env('AUTO_PRINT_KEEP_PDF_DAYS', 7),
     ],

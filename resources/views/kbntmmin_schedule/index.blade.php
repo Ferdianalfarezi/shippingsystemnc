@@ -73,7 +73,7 @@
                         <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="dropdownMenuButton">
                             <li>
                                 <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#createScheduleModal">
-                                    <i class="bi bi-plus-circle me-2"></i> Tambah Cycle
+                                    <i class="bi bi-plus-circle me-2"></i> Tambah Jadwal
                                 </a>
                             </li>
                         </ul>
@@ -89,7 +89,7 @@
                             <i class="bi bi-clock-history text-white fs-5"></i>
                         </div>
                         <div>
-                            <small class="text-white d-block fw-bold me-3" style="font-size: 0.7rem;">Total Cycle</small>
+                            <small class="text-white d-block fw-bold me-3" style="font-size: 0.7rem;">Total Jadwal</small>
                             <h5 class="mb-0 fw-bold text-white">{{ $schedules->count() }}</h5>
                         </div>
                     </div>
@@ -118,6 +118,7 @@
         <table class="table table-compact w-100 mt-1" id="scheduleTable">
             <thead>
                 <tr class="fs-6">
+                    <th>Dock</th>
                     <th>Cycle</th>
                     <th>Jam Keluar</th>
                     <th>Printer</th>
@@ -128,6 +129,13 @@
             <tbody>
                 @forelse($schedules as $schedule)
                     <tr class="fs-5">
+                        <td>
+                            @if ($schedule->dock_code)
+                                <strong>{{ $schedule->dock_code }}</strong>
+                            @else
+                                <span class="badge bg-secondary">Semua dock</span>
+                            @endif
+                        </td>
                         <td><strong>{{ $schedule->cycle }}</strong></td>
                         <td><strong>{{ substr($schedule->jam_keluar, 0, 5) }}</strong></td>
                         <td>
@@ -151,13 +159,14 @@
                                         style="border-radius: 6px 0 0 6px; margin: 0;"
                                         title="Edit"
                                         data-id="{{ $schedule->id }}"
+                                        data-dock="{{ $schedule->dock_code }}"
                                         data-cycle="{{ $schedule->cycle }}"
                                         data-jam="{{ substr($schedule->jam_keluar, 0, 5) }}"
                                         data-printer="{{ $schedule->printer_name }}">
                                     <i class="bi bi-pencil-fill"></i>
                                 </button>
 
-                                <form action="{{ route('kbntmmin-schedule.destroy', $schedule->id) }}" method="POST" class="d-inline delete-schedule-form" style="margin: 0;" data-cycle="{{ $schedule->cycle }}">
+                                <form action="{{ route('kbntmmin-schedule.destroy', $schedule->id) }}" method="POST" class="d-inline delete-schedule-form" style="margin: 0;" data-label="{{ $schedule->label }}">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn btn-danger btn-sm btn-action-square" style="border-radius: 0 6px 6px 0; margin: 0;" title="Hapus">
@@ -169,7 +178,7 @@
                     </tr>
                 @empty
                     <tr class="mt-3">
-                        <td colspan="5" class="text-center py-4">
+                        <td colspan="6" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Belum ada jadwal cycle</p>
@@ -190,6 +199,7 @@
             <thead>
                 <tr class="fs-6">
                     <th>Manifest No</th>
+                    <th>Dock</th>
                     <th>Cycle</th>
                     <th>Printer</th>
                     <th>Status</th>
@@ -201,6 +211,7 @@
                 @forelse($logs as $log)
                     <tr class="fs-5">
                         <td><strong>{{ $log->manifest_no }}</strong></td>
+                        <td>{{ $logDocks[$log->manifest_no] ?? '-' }}</td>
                         <td>{{ $log->cycle }}</td>
                         <td>{{ $log->printer_name ?? '-' }}</td>
                         <td>
@@ -232,7 +243,7 @@
                     </tr>
                 @empty
                     <tr class="mt-3">
-                        <td colspan="6" class="text-center py-4">
+                        <td colspan="7" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Belum ada riwayat auto print</p>
@@ -252,11 +263,16 @@
                     @csrf
                     <div class="modal-header">
                         <h5 class="modal-title" id="createScheduleModalLabel">
-                            <i class="bi bi-plus-circle me-2"></i> Tambah Cycle
+                            <i class="bi bi-plus-circle me-2"></i> Tambah Jadwal
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Dock</label>
+                            <input type="text" name="dock_code" class="form-control text-uppercase" list="dockSuggestions" placeholder="contoh: 4P (kosongkan = semua dock)" value="{{ old('dock_code') }}" autocomplete="off">
+                            <div class="form-text">Kosongkan kalau jadwal ini berlaku untuk semua dock di cycle tersebut.</div>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Cycle</label>
                             <input type="text" name="cycle" class="form-control" placeholder="contoh: 1" value="{{ old('cycle') }}" required>
@@ -289,6 +305,13 @@
         @endforeach
     </datalist>
 
+    {{-- Saran dock: dock yang ada di data kanban TMMIN + yang sudah dipakai di schedule --}}
+    <datalist id="dockSuggestions">
+        @foreach ($dockOptions as $dock)
+            <option value="{{ $dock }}"></option>
+        @endforeach
+    </datalist>
+
     <!-- Modal Edit Cycle -->
     <div class="modal fade" id="editScheduleModal" tabindex="-1" aria-labelledby="editScheduleModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -298,11 +321,16 @@
                     @method('PUT')
                     <div class="modal-header">
                         <h5 class="modal-title" id="editScheduleModalLabel">
-                            <i class="bi bi-pencil-fill me-2"></i> Edit Cycle
+                            <i class="bi bi-pencil-fill me-2"></i> Edit Jadwal
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Dock</label>
+                            <input type="text" name="dock_code" id="edit_dock_code" class="form-control text-uppercase" list="dockSuggestions" placeholder="contoh: 4P (kosongkan = semua dock)" autocomplete="off">
+                            <div class="form-text">Kosongkan kalau jadwal ini berlaku untuk semua dock di cycle tersebut.</div>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Cycle</label>
                             <input type="text" name="cycle" id="edit_cycle" class="form-control" required>
@@ -347,6 +375,7 @@
             const $printerField = $('#edit_printer_name');
 
             $('#editScheduleForm').attr('action', '{{ url('kbntmmin-schedule') }}/' + id);
+            $('#edit_dock_code').val($(this).attr('data-dock') || '');
             $('#edit_cycle').val($(this).attr('data-cycle'));
             $('#edit_jam_keluar').val($(this).attr('data-jam'));
 
@@ -375,11 +404,11 @@
         $('.delete-schedule-form').on('submit', function(e) {
             e.preventDefault();
             const form = this;
-            const cycle = $(this).data('cycle');
+            const label = $(this).data('label');
 
             Swal.fire({
-                title: 'Hapus cycle ' + cycle + '?',
-                text: 'Cycle ini tidak akan di-print otomatis lagi.',
+                title: 'Hapus jadwal ' + label + '?',
+                text: 'Jadwal ini tidak akan di-print otomatis lagi.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#dc2626',

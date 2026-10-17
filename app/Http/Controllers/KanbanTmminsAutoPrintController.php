@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\KanbanTmmins;
 use App\Models\KbntmminSchedule;
 use App\Models\KbntmminPrintLog;
+use App\Services\KanbanTmminAutoPrintPlanner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -47,50 +47,43 @@ class KanbanTmminsAutoPrintController extends Controller
             return response()->json($response);
         }
 
-        $dueSchedules = KbntmminSchedule::where('printer_name', $printer)
-            ->where('jam_keluar', '<=', $nowTime)
-            ->orderBy('jam_keluar')
-            ->get();
+        $allSchedules = KbntmminSchedule::orderBy('jam_keluar')->get();
+        $printerSchedules = $allSchedules->filter(fn ($schedule) => trim((string) $schedule->printer_name) === $printer);
 
-        $nextSchedule = KbntmminSchedule::where('printer_name', $printer)
-            ->where('jam_keluar', '>', $nowTime)
-            ->orderBy('jam_keluar')
-            ->first();
-
+        $nextSchedule = $printerSchedules->first(fn ($schedule) => $schedule->jam_keluar > $nowTime);
         if ($nextSchedule) {
             $response['next'] = [
                 'cycle' => $nextSchedule->cycle,
+                'dock_code' => $nextSchedule->dock_code,
+                'label' => $nextSchedule->label,
                 'jam_keluar' => substr($nextSchedule->jam_keluar, 0, 5),
             ];
         }
 
+        $dueSchedules = $printerSchedules->filter(fn ($schedule) => $schedule->jam_keluar <= $nowTime);
         if ($dueSchedules->isEmpty()) {
             return response()->json($response);
         }
 
-        $printedKeys = KbntmminPrintLog::all(['manifest_no', 'cycle'])
-            ->mapWithKeys(fn ($log) => [$log->manifest_no . '|' . $log->cycle => true])
-            ->all();
+        // Kanban dipasangkan ke schedule per dock + cycle (lihat KanbanTmminAutoPrintPlanner)
+        $plan = app(KanbanTmminAutoPrintPlanner::class)->plan($dueSchedules, $allSchedules);
 
-        $kanbans = KanbanTmmins::all(['id', 'manifest_no', 'cycle']);
-
-        foreach ($dueSchedules as $schedule) {
-            $cycle = KbntmminSchedule::normalizeCycle($schedule->cycle);
-
-            $pending = $kanbans->filter(function ($kanban) use ($cycle, $printedKeys) {
-                return KbntmminSchedule::normalizeCycle($kanban->cycle) === $cycle
-                    && !isset($printedKeys[$kanban->manifest_no . '|' . $cycle]);
-            });
-
-            if ($pending->isNotEmpty()) {
-                return response()->json(array_merge($response, [
-                    'due' => true,
-                    'cycle' => $cycle,
-                    'jam_keluar' => substr($schedule->jam_keluar, 0, 5),
-                    'manifest_nos' => $pending->pluck('manifest_no')->unique()->values(),
-                    'ids' => $pending->pluck('id')->values(),
-                ]));
+        foreach ($plan as $row) {
+            if ($row['pending']->isEmpty()) {
+                continue;
             }
+
+            $schedule = $row['schedule'];
+
+            return response()->json(array_merge($response, [
+                'due' => true,
+                'cycle' => KbntmminSchedule::normalizeCycle($schedule->cycle),
+                'dock_code' => $schedule->dock_code,
+                'label' => $schedule->label,
+                'jam_keluar' => substr($schedule->jam_keluar, 0, 5),
+                'manifest_nos' => $row['pending']->pluck('manifest_no')->unique()->values(),
+                'ids' => $row['pending']->pluck('id')->values(),
+            ]));
         }
 
         return response()->json($response);

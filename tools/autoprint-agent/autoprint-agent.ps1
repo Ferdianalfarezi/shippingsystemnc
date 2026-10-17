@@ -125,7 +125,8 @@ for ($i = 0; $i -lt 10; $i++) {
     $cycle = [string]$check.cycle
     $ids = @($check.ids) -join ','
     $manifestNos = @($check.manifest_nos)
-    $info = "cycle $cycle (jam $($check.jam_keluar)) -> $printer ($($manifestNos.Count) manifest, $(@($check.ids).Count) kanban)"
+    $label = if ($check.label) { [string]$check.label } else { "cycle $cycle" }
+    $info = "$label (jam $($check.jam_keluar)) -> $printer ($($manifestNos.Count) manifest, $(@($check.ids).Count) kanban)"
     Write-Log "Mulai $info"
 
     try {

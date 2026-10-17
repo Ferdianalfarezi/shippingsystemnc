@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Models\KanbanTmmins;
 use App\Models\KbntmminPrintLog;
 use App\Models\KbntmminSchedule;
+use App\Services\KanbanTmminAutoPrintPlanner;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
@@ -26,69 +26,57 @@ class KanbanTmminAutoPrint extends Command
         $nowTime = $now->format('H:i:s');
         $stamp = '[' . $now->format('Y-m-d H:i:s') . ']';
 
-        $dueSchedules = KbntmminSchedule::where('jam_keluar', '<=', $nowTime)
-            ->orderBy('jam_keluar')
-            ->get();
+        $allSchedules = KbntmminSchedule::orderBy('jam_keluar')->get();
+        $dueSchedules = $allSchedules->filter(fn ($schedule) => $schedule->jam_keluar <= $nowTime);
 
         if ($dueSchedules->isEmpty()) {
             $this->line("{$stamp} Belum ada cycle yang waktunya keluar.");
             return self::SUCCESS;
         }
 
-        // Semua manifest+cycle yang sudah pernah diproses (printed maupun failed) di-skip.
-        // Yang failed di-retry manual lewat tombol "Print Ulang" di halaman schedule.
-        $loggedKeys = KbntmminPrintLog::all(['manifest_no', 'cycle'])
-            ->mapWithKeys(fn ($log) => [$log->manifest_no . '|' . $log->cycle => true])
-            ->all();
+        // Kanban dipasangkan ke schedule per dock + cycle. Manifest+cycle yang sudah pernah
+        // diproses (printed maupun failed) di-skip; yang failed di-retry lewat "Print Ulang".
+        $plan = app(KanbanTmminAutoPrintPlanner::class)->plan($dueSchedules, $allSchedules);
 
-        $kanbans = KanbanTmmins::all(['id', 'manifest_no', 'cycle']);
-
-        foreach ($dueSchedules as $schedule) {
+        foreach ($plan as $row) {
+            $schedule = $row['schedule'];
             $cycle = KbntmminSchedule::normalizeCycle($schedule->cycle);
-            $jam = substr($schedule->jam_keluar, 0, 5);
+            $label = $schedule->label . ' (' . substr($schedule->jam_keluar, 0, 5) . ')';
 
-            $cycleKanbans = $kanbans->filter(
-                fn ($kanban) => KbntmminSchedule::normalizeCycle($kanban->cycle) === $cycle
-            );
-
-            if ($cycleKanbans->isEmpty()) {
-                $this->line("{$stamp} Cycle {$cycle} ({$jam}): tidak ada data kanban dengan cycle ini, dilewati.");
+            if ($row['kanbans']->isEmpty()) {
+                $this->line("{$stamp} {$label}: tidak ada data kanban, dilewati.");
                 continue;
             }
 
-            $pending = $cycleKanbans->filter(
-                fn ($kanban) => !isset($loggedKeys[$kanban->manifest_no . '|' . $cycle])
-            );
-
-            if ($pending->isEmpty()) {
-                $totalManifest = $cycleKanbans->pluck('manifest_no')->unique()->count();
-                $this->line("{$stamp} Cycle {$cycle} ({$jam}): semua {$totalManifest} manifest sudah pernah diproses, dilewati.");
+            if ($row['pending']->isEmpty()) {
+                $totalManifest = $row['kanbans']->pluck('manifest_no')->unique()->count();
+                $this->line("{$stamp} {$label}: semua {$totalManifest} manifest sudah pernah diproses, dilewati.");
                 continue;
             }
 
             if (empty(trim((string) $schedule->printer_name))) {
-                $this->warn("{$stamp} Cycle {$cycle} ({$jam}): sudah waktunya tapi printer belum diset, dilewati.");
+                $this->warn("{$stamp} {$label}: sudah waktunya tapi printer belum diset, dilewati.");
                 continue;
             }
 
-            $this->processCycle($stamp, $cycle, trim($schedule->printer_name), $pending);
+            $this->processCycle($stamp, $schedule->label, $cycle, trim($schedule->printer_name), $row['pending']);
         }
 
         return self::SUCCESS;
     }
 
-    private function processCycle(string $stamp, string $cycle, string $printer, Collection $pending): void
+    private function processCycle(string $stamp, string $label, string $cycle, string $printer, Collection $pending): void
     {
         $ids = $pending->pluck('id')->implode(',');
         $manifestNos = $pending->pluck('manifest_no')->unique()->values();
 
-        $this->info("{$stamp} Cycle {$cycle} → {$printer} ({$manifestNos->count()} manifest, {$pending->count()} kanban)");
+        $this->info("{$stamp} {$label} → {$printer} ({$manifestNos->count()} manifest, {$pending->count()} kanban)");
 
         $status = 'printed';
         $error = null;
 
         try {
-            $pdfPath = $this->renderPdf($ids, $cycle);
+            $pdfPath = $this->renderPdf($ids, $label);
             $this->line("  PDF: {$pdfPath}");
 
             $this->sendToPrinter($pdfPath, $printer);
@@ -98,7 +86,7 @@ class KanbanTmminAutoPrint extends Command
             $error = mb_substr($e->getMessage(), 0, 1000);
 
             $this->error('  GAGAL: ' . $error);
-            Log::error("Auto print cycle {$cycle} ke {$printer} gagal: " . $e->getMessage());
+            Log::error("Auto print {$label} ke {$printer} gagal: " . $e->getMessage());
         }
 
         foreach ($manifestNos as $manifestNo) {
@@ -119,7 +107,7 @@ class KanbanTmminAutoPrint extends Command
      * Buka halaman print (route auto-print.print) pakai Chrome headless
      * lalu simpan jadi PDF. Return: path file PDF.
      */
-    private function renderPdf(string $ids, string $cycle): string
+    private function renderPdf(string $ids, string $label): string
     {
         $chrome = config('services.auto_print.chrome_path');
         if (!is_file($chrome)) {
@@ -129,8 +117,9 @@ class KanbanTmminAutoPrint extends Command
         $dir = $this->winPath(storage_path('app/autoprint/pdf/' . now()->format('Y-m-d')));
         File::ensureDirectoryExists($dir);
 
-        $safeCycle = preg_replace('/[^A-Za-z0-9]/', '', $cycle) ?: 'X';
-        $pdfPath = $dir . DIRECTORY_SEPARATOR . 'cycle' . $safeCycle . '_' . now()->format('His') . '.pdf';
+        // mis. "Dock 4P cycle 4" -> Dock_4P_cycle_4_120300.pdf (dock beda tidak saling timpa)
+        $safeLabel = trim(preg_replace('/[^A-Za-z0-9]+/', '_', $label), '_') ?: 'cycle';
+        $pdfPath = $dir . DIRECTORY_SEPARATOR . $safeLabel . '_' . now()->format('His') . '.pdf';
 
         $profileDir = $this->winPath(storage_path('app/autoprint/chrome-profile'));
         File::ensureDirectoryExists($profileDir);

@@ -139,7 +139,10 @@ class KanbanTmminsAutoPrintController extends Controller
             'printer' => 'required|string|max:255',
             'manifest_nos' => 'required|array|min:1',
             'manifest_nos.*' => 'required|string|max:50',
+            'source' => 'nullable|string|in:KIOSK,AGENT',
         ]);
+
+        $source = $data['source'] ?? 'KIOSK';
 
         $cycle = KbntmminSchedule::normalizeCycle($data['cycle']);
         $printer = trim($data['printer']);
@@ -152,12 +155,12 @@ class KanbanTmminsAutoPrintController extends Controller
                     'status' => 'printed',
                     'error_message' => null,
                     'printed_at' => now(),
-                    'printed_by' => 'KIOSK',
+                    'printed_by' => $source,
                 ]
             );
         }
 
-        Log::info("Auto print (kiosk) cycle {$cycle} → {$printer}: " . count($data['manifest_nos']) . " manifest ditandai printed");
+        Log::info("Auto print ({$source}) cycle {$cycle} → {$printer}: " . count($data['manifest_nos']) . " manifest ditandai printed");
 
         return response()->json(['success' => true]);
     }

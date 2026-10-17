@@ -267,17 +267,8 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Printer</label>
-                            @if ($hasPrinterList)
-                                <select name="printer_name" class="form-select" required>
-                                    <option value="">-- Pilih Printer --</option>
-                                    @foreach ($printerOptions as $printer)
-                                        <option value="{{ $printer }}" @selected(old('printer_name') === $printer)>{{ $printer }}</option>
-                                    @endforeach
-                                </select>
-                            @else
-                                <input type="text" name="printer_name" class="form-control" placeholder="Ketik nama printer persis seperti di Windows" value="{{ old('printer_name') }}" autocomplete="off" required>
-                                <div class="form-text">Daftar printer tidak terbaca dari Windows, ketik nama printer secara manual.</div>
-                            @endif
+                            <input type="text" name="printer_name" class="form-control" list="printerSuggestions" placeholder="Ketik nama printer persis seperti di PC yang nge-print" value="{{ old('printer_name') }}" autocomplete="off" required>
+                            <div class="form-text">Nama printer di PC yang menjalankan auto print agent (bukan printer server).</div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -290,6 +281,13 @@
             </div>
         </div>
     </div>
+
+    {{-- Saran nama printer: printer yang sudah dipakai di schedule + printer yang ter-install di server --}}
+    <datalist id="printerSuggestions">
+        @foreach (collect($schedules->pluck('printer_name'))->merge($printerOptions)->filter()->unique() as $printer)
+            <option value="{{ $printer }}"></option>
+        @endforeach
+    </datalist>
 
     <!-- Modal Edit Cycle -->
     <div class="modal fade" id="editScheduleModal" tabindex="-1" aria-labelledby="editScheduleModalLabel" aria-hidden="true">
@@ -315,17 +313,8 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Printer</label>
-                            @if ($hasPrinterList)
-                                <select name="printer_name" id="edit_printer_name" class="form-select" required>
-                                    <option value="">-- Pilih Printer --</option>
-                                    @foreach ($printerOptions as $printer)
-                                        <option value="{{ $printer }}">{{ $printer }}</option>
-                                    @endforeach
-                                </select>
-                            @else
-                                <input type="text" name="printer_name" id="edit_printer_name" class="form-control" placeholder="Ketik nama printer persis seperti di Windows" autocomplete="off" required>
-                                <div class="form-text">Daftar printer tidak terbaca dari Windows, ketik nama printer secara manual.</div>
-                            @endif
+                            <input type="text" name="printer_name" id="edit_printer_name" class="form-control" list="printerSuggestions" placeholder="Ketik nama printer persis seperti di PC yang nge-print" autocomplete="off" required>
+                            <div class="form-text">Nama printer di PC yang menjalankan auto print agent (bukan printer server).</div>
                         </div>
                     </div>
                     <div class="modal-footer">

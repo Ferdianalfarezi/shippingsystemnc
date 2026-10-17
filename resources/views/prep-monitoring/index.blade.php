@@ -168,26 +168,26 @@
     <div class="table-responsive p-0 mt-0">
         <style>
             /* Belang hitam / abu-abu supaya gampang dibaca kalau datanya banyak */
-            #monitoringTable tbody tr:nth-child(odd) > td {
-                background-color: #000000;
+            #monitoringTable tbody tr > td {
+                background-color: #000000 !important;
             }
 
-            #monitoringTable tbody tr:nth-child(even) > td {
-                background-color: #262626;
+            #monitoringTable tbody tr.row-stripe > td {
+                background-color: #3a3a3a !important;
             }
 
             #monitoringTable tbody tr:hover > td {
-                background-color: #505050;
+                background-color: #5a5a5a !important;
             }
 
-            #monitoringTable tr.row-delay > td {
+            #monitoringTable tbody tr.row-delay > td {
                 background-color: #dc3545 !important;
                 color: #fff !important;
                 font-weight: bold;
             }
 
             /* Kotak Pr yang preparation-nya sudah lengkap (mis. 4 / 4) */
-            #monitoringTable tr > td.pr-ok {
+            #monitoringTable tbody tr > td.pr-ok {
                 background-color: #198754 !important;
                 color: #fff !important;
                 font-weight: bold;
@@ -253,7 +253,7 @@
                         $prOk = $row->status === 'ok';
                         $shipClass = '';
                     @endphp
-                    <tr class="fs-6 {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
+                    <tr class="fs-6 {{ $loop->even ? 'row-stripe' : '' }} {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
                         <td>{{ $row->customers }}</td>
                         <td>{{ $row->cycle }}</td>
                         <td>{{ $row->dock }}</td>

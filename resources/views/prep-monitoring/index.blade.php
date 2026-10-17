@@ -167,6 +167,19 @@
 
     <div class="table-responsive p-0 mt-0">
         <style>
+            /* Belang hitam / abu-abu supaya gampang dibaca kalau datanya banyak */
+            #monitoringTable tbody tr:nth-child(odd) > td {
+                background-color: #000000;
+            }
+
+            #monitoringTable tbody tr:nth-child(even) > td {
+                background-color: #262626;
+            }
+
+            #monitoringTable tbody tr:hover > td {
+                background-color: #505050;
+            }
+
             #monitoringTable tr.row-delay > td {
                 background-color: #dc3545 !important;
                 color: #fff !important;

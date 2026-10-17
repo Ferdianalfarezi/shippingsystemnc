@@ -113,8 +113,24 @@
     <!-- Table -->
     <div class="table-responsive p-0 mt-0">
         <style>
-            #monitoringTable tr.row-delay > td {
+            /* Belang hitam / abu-abu supaya gampang dibaca kalau datanya banyak */
+            #monitoringTable tbody tr > td {
+                background-color: #000000 !important;
+            }
+
+            #monitoringTable tbody tr.row-stripe > td {
+                background-color: #3a3a3a !important;
+            }
+
+            #monitoringTable tbody tr.row-delay > td {
                 background-color: #dc3545 !important;
+                color: #fff !important;
+                font-weight: bold;
+            }
+
+            /* Kotak Pr yang preparation-nya sudah lengkap (mis. 4 / 4) */
+            #monitoringTable tbody tr > td.pr-ok {
+                background-color: #198754 !important;
                 color: #fff !important;
                 font-weight: bold;
             }
@@ -172,13 +188,14 @@
                             if ($isExport && $n >= 1 && $n <= 3) $shipKey = 'EX-' . $n;
                             if (!$isExport && $n >= 1 && $n <= 13) $shipKey = 'S-' . $n;
                         }
-                        $progressText = $row->status === 'ok' ? 'OK' : ($row->pr_count . ' / ' . $row->skid);
+                        $progressText = $row->pr_count . ' / ' . $row->skid;
 
                         // Section Pr & Shipping polos (teks hitam). Baris baru merah kalau Delivery = Delay.
-                        $prClass = '';
+                        // Kalau preparation sudah ok, cuma kotak Pr yang aktif yang hijau.
+                        $prOk = $row->status === 'ok';
                         $shipClass = '';
                     @endphp
-                    <tr class="fs-6 {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
+                    <tr class="fs-6 {{ $loop->even ? 'row-stripe' : '' }} {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
                         <td>{{ $row->customers }}</td>
                         <td>{{ $row->cycle }}</td>
                         <td>{{ $row->dock }}</td>
@@ -189,9 +206,8 @@
                         <td>{{ $row->start_ship_at ? $row->start_ship_at->format('H:i') : '-' }}</td>
                         <td>{{ $row->etd_time ? date('H:i', strtotime($row->etd_time)) : '-' }}</td>
 
-                        {{-- Seluruh section Pr diwarnai sama (bukan cuma kolom aktif) --}}
                         @for($i = 1; $i <= 5; $i++) {{-- 5 = AB (Abnormal) --}}
-                            <td class="{{ $prClass }}" @if($i === 5) style="border-right: 4px solid #ff0000 !important;" @endif>
+                            <td class="{{ $prOk && $row->pr_number == $i ? 'pr-ok' : '' }}" @if($i === 5) style="border-right: 4px solid #ff0000 !important;" @endif>
                                 {{ $row->pr_number == $i ? $progressText : '-' }}
                             </td>
                         @endfor

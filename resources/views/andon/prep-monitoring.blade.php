@@ -86,7 +86,7 @@
 
                     <div class="d-flex align-items-center gap-2">
                         <small class="text-white" style="font-size: 1rem;">PR:</small>
-                        <span class="fw-semibold text-white">{{ $recentCompleted->pr_number }} ({{ $recentCompleted->skid }}/{{ $recentCompleted->skid }})</span>
+                        <span class="fw-semibold text-white">{{ $recentCompleted->pr_number == \App\Models\PrepMonitoring::PR_ABNORMAL ? 'AB' : $recentCompleted->pr_number }} ({{ $recentCompleted->skid }}/{{ $recentCompleted->skid }})</span>
                     </div>
 
                     <div class="vr" style="height: 30px; opacity: 0.2;"></div>
@@ -129,7 +129,7 @@
                     <th colspan="2">QTY</th>
                     <th colspan="2">Time Start</th>
                     <th rowspan="2">ETD</th>
-                    <th colspan="21">Status</th>
+                    <th colspan="22">Status</th>
                 </tr>
                 <tr class="fs-6">
                     <th>Kbn</th>
@@ -139,7 +139,8 @@
                     <th>Pr 1</th>
                     <th>Pr 2</th>
                     <th>Pr 3</th>
-                    <th style="border-right: 5px solid #ff0000 !important;">Pr 4</th>
+                    <th>Pr 4</th>
+                    <th style="border-right: 5px solid #ff0000 !important;" title="Abnormal">AB</th>
                     <th style="border-left: 5px solid #ff0000 !important;">S-1</th>
                     <th>S-2</th>
                     <th>S-3</th>
@@ -189,8 +190,8 @@
                         <td>{{ $row->etd_time ? date('H:i', strtotime($row->etd_time)) : '-' }}</td>
 
                         {{-- Seluruh section Pr diwarnai sama (bukan cuma kolom aktif) --}}
-                        @for($i = 1; $i <= 4; $i++)
-                            <td class="{{ $prClass }}" @if($i === 4) style="border-right: 4px solid #ff0000 !important;" @endif>
+                        @for($i = 1; $i <= 5; $i++) {{-- 5 = AB (Abnormal) --}}
+                            <td class="{{ $prClass }}" @if($i === 5) style="border-right: 4px solid #ff0000 !important;" @endif>
                                 {{ $row->pr_number == $i ? $progressText : '-' }}
                             </td>
                         @endfor
@@ -208,7 +209,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="30" class="text-center py-4">
+                        <td colspan="31" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Semua data sudah diambil milkrun</p>

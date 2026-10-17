@@ -310,6 +310,7 @@
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-shipping-pr-btn" data-pr="2">PR 2</button></div>
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-shipping-pr-btn" data-pr="3">PR 3</button></div>
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-shipping-pr-btn" data-pr="4">PR 4</button></div>
+                        <div class="col-12"><button type="button" class="btn btn-outline-primary w-100 pr-shipping-pr-btn" data-pr="5">AB (Abnormal)</button></div>
                     </div>
 
                     <label class="form-label fw-bold">Shipping</label>

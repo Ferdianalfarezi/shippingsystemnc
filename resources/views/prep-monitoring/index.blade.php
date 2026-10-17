@@ -172,6 +172,13 @@
                 color: #fff !important;
                 font-weight: bold;
             }
+
+            /* Kotak Pr yang preparation-nya sudah lengkap (mis. 4 / 4) */
+            #monitoringTable tr > td.pr-ok {
+                background-color: #198754 !important;
+                color: #fff !important;
+                font-weight: bold;
+            }
         </style>
         <table class="table table-bordered table-compact w-100 mt-1 text-center align-middle" id="monitoringTable">
             <thead>
@@ -183,7 +190,7 @@
                     <th colspan="2">QTY</th>
                     <th colspan="2">Time Start</th>
                     <th rowspan="2">ETD</th>
-                    <th colspan="21">Status</th>
+                    <th colspan="22">Status</th>
                 </tr>
                 <tr class="fs-6">
                     <th>Kbn</th>
@@ -193,7 +200,8 @@
                     <th>Pr 1</th>
                     <th>Pr 2</th>
                     <th>Pr 3</th>
-                    <th style="border-right: 5px solid #ff0000 !important;">Pr 4</th>
+                    <th>Pr 4</th>
+                    <th style="border-right: 5px solid #ff0000 !important;" title="Abnormal">AB</th>
                     <th style="border-left: 5px solid #ff0000 !important;">S-1</th>
                     <th>S-2</th>
                     <th>S-3</th>
@@ -225,10 +233,11 @@
                             if ($isExport && $n >= 1 && $n <= 3) $shipKey = 'EX-' . $n;
                             if (!$isExport && $n >= 1 && $n <= 13) $shipKey = 'S-' . $n;
                         }
-                        $progressText = $row->status === 'ok' ? 'OK' : ($row->pr_count . ' / ' . $row->skid);
+                        $progressText = $row->pr_count . ' / ' . $row->skid;
 
                         // Section Pr & Shipping polos (teks hitam). Baris baru merah kalau Delivery = Delay.
-                        $prClass = '';
+                        // Kalau preparation sudah ok, cuma kotak Pr yang aktif yang hijau.
+                        $prOk = $row->status === 'ok';
                         $shipClass = '';
                     @endphp
                     <tr class="fs-6 {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
@@ -242,9 +251,8 @@
                         <td>{{ $row->start_ship_at ? $row->start_ship_at->format('H:i') : '-' }}</td>
                         <td>{{ $row->etd_time ? date('H:i', strtotime($row->etd_time)) : '-' }}</td>
 
-                        {{-- Seluruh section Pr diwarnai sama (bukan cuma kolom aktif) --}}
-                        @for($i = 1; $i <= 4; $i++)
-                            <td class="{{ $prClass }}" @if($i === 4) style="border-right: 4px solid #ff0000 !important;" @endif>
+                        @for($i = 1; $i <= 5; $i++) {{-- 5 = AB (Abnormal) --}}
+                            <td class="{{ $prOk && $row->pr_number == $i ? 'pr-ok' : '' }}" @if($i === 5) style="border-right: 4px solid #ff0000 !important;" @endif>
                                 {{ $row->pr_number == $i ? $progressText : '-' }}
                             </td>
                         @endfor
@@ -262,7 +270,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="30" class="text-center py-4">
+                        <td colspan="31" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Semua data sudah diambil milkrun</p>
@@ -289,6 +297,7 @@
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-select-btn" data-pr="2">PR 2</button></div>
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-select-btn" data-pr="3">PR 3</button></div>
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-select-btn" data-pr="4">PR 4</button></div>
+                        <div class="col-12"><button type="button" class="btn btn-outline-danger w-100 pr-select-btn" data-pr="5">AB (Abnormal)</button></div>
                     </div>
                 </div>
             </div>

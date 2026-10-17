@@ -194,7 +194,7 @@ class PrepMonitoringController extends Controller
     {
         $validated = $request->validate([
             'no_dn'     => 'required|string|max:255',
-            'pr_number' => 'nullable|integer|min:1|max:4',
+            'pr_number' => 'nullable|integer|min:1|max:5', // 5 = AB (Abnormal)
         ]);
 
         DB::beginTransaction();
@@ -299,8 +299,8 @@ class PrepMonitoringController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $isComplete
-                    ? 'DN ' . $preparation->no_dn . ' discan. PR ' . $monitoring->pr_number . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . ') & sudah dipindah ke Shipping!'
-                    : 'DN ' . $preparation->no_dn . ' discan. Progress PR ' . $monitoring->pr_number . ': ' . $monitoring->pr_count . '/' . $monitoring->skid,
+                    ? 'DN ' . $preparation->no_dn . ' discan. ' . $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . ') & sudah dipindah ke Shipping!'
+                    : 'DN ' . $preparation->no_dn . ' discan. Progress ' . $monitoring->pr_label . ': ' . $monitoring->pr_count . '/' . $monitoring->skid,
                 'data' => $monitoring->fresh(),
             ]);
 
@@ -325,7 +325,7 @@ class PrepMonitoringController extends Controller
     {
         $validated = $request->validate([
             'no_dn'            => 'required|string|max:255',
-            'pr_number'        => 'nullable|integer|min:1|max:4',
+            'pr_number'        => 'nullable|integer|min:1|max:5', // 5 = AB (Abnormal)
             'shipping_address' => 'nullable|string|max:255',
         ]);
 
@@ -431,8 +431,8 @@ class PrepMonitoringController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $isComplete
-                    ? 'DN ' . $preparation->no_dn . ' dipindahkan ke ' . $monitoring->shipping_address . '. PR ' . $monitoring->pr_number . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . ')!'
-                    : 'DN ' . $preparation->no_dn . ' dipindahkan ke ' . $monitoring->shipping_address . '. Progress PR ' . $monitoring->pr_number . ': ' . $monitoring->pr_count . '/' . $monitoring->skid,
+                    ? 'DN ' . $preparation->no_dn . ' dipindahkan ke ' . $monitoring->shipping_address . '. ' . $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . ')!'
+                    : 'DN ' . $preparation->no_dn . ' dipindahkan ke ' . $monitoring->shipping_address . '. Progress ' . $monitoring->pr_label . ': ' . $monitoring->pr_count . '/' . $monitoring->skid,
                 'data' => $monitoring->fresh(),
             ]);
 

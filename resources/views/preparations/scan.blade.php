@@ -126,6 +126,9 @@
                     <div class="col-6"><button type="button" class="btn btn-outline-dark w-100 py-4 pr-btn" data-pr="3"><strong>PR 3</strong></button></div>
                     <div class="col-6"><button type="button" class="btn btn-outline-dark w-100 py-4 pr-btn" data-pr="4"><strong>PR 4</strong></button></div>
                 </div>
+                <div class="row g-2 mt-0">
+                    <div class="col-12"><button type="button" class="btn btn-outline-danger w-100 py-4 pr-btn" data-pr="5"><strong>AB (Abnormal)</strong></button></div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary w-100 py-2" data-bs-dismiss="modal">
@@ -289,7 +292,8 @@ $(document).ready(function() {
         
         const prNumber = $(this).data('pr');
         const btn = $(this);
-        
+        const originalHtml = btn.html();
+
         $('.pr-btn').prop('disabled', true);
         btn.html('<span class="spinner-border spinner-border-sm"></span>');
         
@@ -298,7 +302,7 @@ $(document).ready(function() {
         }, function() {
             // restore button kalau gagal
             $('.pr-btn').prop('disabled', false);
-            btn.html(`<strong>PR ${prNumber}</strong>`);
+            btn.html(originalHtml);
         });
     });
     

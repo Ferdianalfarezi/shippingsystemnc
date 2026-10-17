@@ -68,14 +68,30 @@ class KbntmminScheduleController extends Controller
 
         $data['printer_name'] = trim($data['printer_name']);
 
+        $oldCycle = KbntmminSchedule::normalizeCycle($schedule->cycle);
+        $jamChanged = substr((string) $schedule->jam_keluar, 0, 5) !== $data['jam_keluar'];
+
         $schedule->update($data);
+
+        // Jam keluar diubah → log print cycle ini hari ini dihapus,
+        // supaya scheduler print ulang di jam yang baru.
+        $text = "Cycle {$data['cycle']} berhasil diupdate.";
+        if ($jamChanged) {
+            $reset = KbntmminPrintLog::whereIn('cycle', array_unique([$oldCycle, $data['cycle']]))
+                ->whereDate('printed_at', today())
+                ->delete();
+
+            if ($reset > 0) {
+                $text .= " Cycle ini akan di-print ulang jam {$data['jam_keluar']}.";
+            }
+        }
 
         return redirect()->route('kbntmmin-schedule.index')->with([
             'sweet_alert' => [
                 'type' => 'success',
                 'icon' => 'success',
                 'title' => 'Berhasil!',
-                'text' => "Cycle {$data['cycle']} berhasil diupdate.",
+                'text' => $text,
                 'showConfirmButton' => true,
                 'timer' => 3000,
             ],

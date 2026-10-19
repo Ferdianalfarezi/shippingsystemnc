@@ -47,8 +47,10 @@ class KanbanTmminAutoPrintPlanner
             $result[$schedule->id] = ['schedule' => $schedule, 'kanbans' => [], 'pending' => []];
         }
 
-        // Manifest+cycle yang sudah pernah diproses (printed maupun failed) tidak di-print lagi
-        $loggedKeys = KbntmminPrintLog::all(['manifest_no', 'cycle'])
+        // Manifest+cycle yang sudah diproses HARI INI (printed maupun failed) tidak di-print lagi.
+        // Riwayat hari sebelumnya diabaikan → tiap hari di jam schedule tetap keluar lagi.
+        $loggedKeys = KbntmminPrintLog::whereDate('printed_at', today())
+            ->get(['manifest_no', 'cycle'])
             ->mapWithKeys(fn ($log) => [$log->manifest_no . '|' . $log->cycle => true])
             ->all();
 

@@ -34,8 +34,8 @@ class KanbanTmminAutoPrint extends Command
             return self::SUCCESS;
         }
 
-        // Kanban dipasangkan ke schedule per dock + cycle. Manifest+cycle yang sudah pernah
-        // diproses (printed maupun failed) di-skip; yang failed di-retry lewat "Print Ulang".
+        // Kanban dipasangkan ke schedule per dock + cycle. Tiap hari keluar sekali;
+        // yang sudah diproses hari ini (printed maupun failed) di-skip, failed di-retry lewat "Print Ulang".
         $plan = app(KanbanTmminAutoPrintPlanner::class)->plan($dueSchedules, $allSchedules);
 
         foreach ($plan as $row) {
@@ -50,7 +50,7 @@ class KanbanTmminAutoPrint extends Command
 
             if ($row['pending']->isEmpty()) {
                 $totalManifest = $row['kanbans']->pluck('manifest_no')->unique()->count();
-                $this->line("{$stamp} {$label}: semua {$totalManifest} manifest sudah pernah diproses, dilewati.");
+                $this->line("{$stamp} {$label}: semua {$totalManifest} manifest sudah diproses hari ini, dilewati.");
                 continue;
             }
 

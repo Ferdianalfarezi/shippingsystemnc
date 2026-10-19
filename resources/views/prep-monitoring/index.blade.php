@@ -246,11 +246,13 @@
                             if ($isExport && $n >= 1 && $n <= 3) $shipKey = 'EX-' . $n;
                             if (!$isExport && $n >= 1 && $n <= 13) $shipKey = 'S-' . $n;
                         }
-                        $progressText = $row->pr_count . ' / ' . $row->skid;
-
                         // Section Pr & Shipping polos (teks hitam). Baris baru merah kalau Delivery = Delay.
                         // Kalau preparation sudah ok, cuma kotak Pr yang aktif yang hijau.
+                        // Pr: "OK" kalau sudah lengkap, selain itu progress (mis. 2 / 4).
+                        // Shipping: selalu progress (mis. 4 / 4).
                         $prOk = $row->status === 'ok';
+                        $prText = $prOk ? 'OK' : $row->pr_count . ' / ' . $row->skid;
+                        $shipText = ($row->ship_count ?? $row->pr_count) . ' / ' . $row->skid;
                         $shipClass = '';
                     @endphp
                     <tr class="fs-6 {{ $loop->even ? 'row-stripe' : '' }} {{ $row->delivery_status === 'delay' ? 'row-delay' : '' }}">
@@ -266,14 +268,14 @@
 
                         @for($i = 1; $i <= 5; $i++) {{-- 5 = AB (Abnormal) --}}
                             <td class="{{ $prOk && $row->pr_number == $i ? 'pr-ok' : '' }}" @if($i === 5) style="border-right: 4px solid #ff0000 !important;" @endif>
-                                {{ $row->pr_number == $i ? $progressText : '-' }}
+                                {{ $row->pr_number == $i ? $prText : '-' }}
                             </td>
                         @endfor
 
                         {{-- Seluruh section Shipping diwarnai sama (bukan cuma kolom aktif) --}}
                         @foreach(array_merge(array_map(fn ($i) => 'S-' . $i, range(1, 13)), ['EX-1', 'EX-2', 'EX-3']) as $key)
                             <td class="{{ $shipClass }}" @if($key === 'S-1' || $key === 'EX-1') style="border-left: 4px solid #000 !important;" @endif>
-                                {{ $shipKey === $key ? $progressText : '-' }}
+                                {{ $shipKey === $key ? $shipText : '-' }}
                             </td>
                         @endforeach
 

@@ -54,6 +54,7 @@ class KanbanTmminsAutoPrintController extends Controller
         if ($nextSchedule) {
             $response['next'] = [
                 'cycle' => $nextSchedule->cycle,
+                'route' => $nextSchedule->route,
                 'dock_code' => $nextSchedule->dock_code,
                 'label' => $nextSchedule->label,
                 'jam_keluar' => substr($nextSchedule->jam_keluar, 0, 5),
@@ -78,6 +79,7 @@ class KanbanTmminsAutoPrintController extends Controller
             return response()->json(array_merge($response, [
                 'due' => true,
                 'cycle' => KbntmminSchedule::normalizeCycle($schedule->cycle),
+                'route' => $schedule->route,
                 'dock_code' => $schedule->dock_code,
                 'label' => $schedule->label,
                 'jam_keluar' => substr($schedule->jam_keluar, 0, 5),

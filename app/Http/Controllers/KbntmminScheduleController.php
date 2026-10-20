@@ -14,21 +14,27 @@ class KbntmminScheduleController extends Controller
 {
     public function index()
     {
-        $schedules = KbntmminSchedule::orderBy('jam_keluar')->orderBy('dock_code')->get();
+        $schedules = KbntmminSchedule::orderBy('jam_keluar')->orderBy('route')->orderBy('dock_code')->get();
         $logs = KbntmminPrintLog::orderByDesc('printed_at')->limit(50)->get();
         $printers = $this->getInstalledPrinters();
 
-        // Dock tiap manifest di riwayat (1 manifest = 1 dock)
-        $logDocks = KanbanTmmins::whereIn('manifest_no', $logs->pluck('manifest_no')->unique())
-            ->pluck('dock_code', 'manifest_no');
+        // Route & dock tiap manifest di riwayat (1 manifest = 1 route & 1 dock)
+        $logManifests = KanbanTmmins::whereIn('manifest_no', $logs->pluck('manifest_no')->unique())
+            ->get(['manifest_no', 'route', 'dock_code'])
+            ->keyBy('manifest_no');
 
-        // Saran dock di form: dock yang ada di data kanban + yang sudah dipakai di schedule
+        // Saran route & dock di form: yang ada di data kanban + yang sudah dipakai di schedule
+        $routeOptions = KanbanTmmins::query()->distinct()->pluck('route')
+            ->merge($schedules->pluck('route'))
+            ->map(fn ($route) => KbntmminSchedule::normalizeRoute($route))
+            ->filter()->unique()->sort()->values();
+
         $dockOptions = KanbanTmmins::query()->distinct()->pluck('dock_code')
             ->merge($schedules->pluck('dock_code'))
             ->map(fn ($dock) => KbntmminSchedule::normalizeDock($dock))
             ->filter()->unique()->sort()->values();
 
-        return view('kbntmmin_schedule.index', compact('schedules', 'logs', 'printers', 'logDocks', 'dockOptions'));
+        return view('kbntmmin_schedule.index', compact('schedules', 'logs', 'printers', 'logManifests', 'routeOptions', 'dockOptions'));
     }
 
     public function store(Request $request)
@@ -137,34 +143,42 @@ class KbntmminScheduleController extends Controller
      * Kalau gagal (misal bukan Windows), return array kosong — input tetap bisa diketik manual.
      */
     /**
-     * Validasi form schedule. Kombinasi dock + cycle harus unik;
-     * dock kosong = berlaku untuk semua dock di cycle tsb.
+     * Validasi form schedule. Kombinasi route + dock + cycle harus unik;
+     * route/dock kosong = berlaku untuk semua route/dock di cycle tsb.
      */
     private function validateSchedule(Request $request, ?KbntmminSchedule $ignore = null): array
     {
+        $route = KbntmminSchedule::normalizeRoute($request->input('route'));
         $dock = KbntmminSchedule::normalizeDock($request->input('dock_code'));
 
         $request->merge([
             'cycle' => KbntmminSchedule::normalizeCycle($request->input('cycle')),
+            'route' => $route,
             'dock_code' => $dock,
         ]);
 
         $unique = Rule::unique('kbntmmin_schedule', 'cycle')
+            ->where(fn ($query) => $route === null ? $query->whereNull('route') : $query->where('route', $route))
             ->where(fn ($query) => $dock === null ? $query->whereNull('dock_code') : $query->where('dock_code', $dock));
 
         if ($ignore) {
             $unique->ignore($ignore->id);
         }
 
+        $candidate = new KbntmminSchedule([
+            'route' => $route,
+            'dock_code' => $dock,
+            'cycle' => $request->input('cycle'),
+        ]);
+
         $data = $request->validate([
+            'route' => 'nullable|string|max:20',
             'dock_code' => 'nullable|string|max:10',
             'cycle' => ['required', 'string', 'max:10', $unique],
             'jam_keluar' => 'required|date_format:H:i',
             'printer_name' => 'required|string|max:255',
         ], [
-            'cycle.unique' => $dock === null
-                ? 'Cycle ini (semua dock) sudah ada di master.'
-                : "Dock {$dock} cycle ini sudah ada di master.",
+            'cycle.unique' => 'Jadwal ' . $candidate->label . ' sudah ada di master.',
             'printer_name.required' => 'Printer wajib dipilih.',
         ]);
 

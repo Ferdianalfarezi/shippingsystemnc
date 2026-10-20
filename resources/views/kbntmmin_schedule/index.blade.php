@@ -118,6 +118,7 @@
         <table class="table table-compact w-100 mt-1" id="scheduleTable">
             <thead>
                 <tr class="fs-6">
+                    <th>Route</th>
                     <th>Dock</th>
                     <th>Cycle</th>
                     <th>Jam Keluar</th>
@@ -129,6 +130,13 @@
             <tbody>
                 @forelse($schedules as $schedule)
                     <tr class="fs-5">
+                        <td>
+                            @if ($schedule->route)
+                                <strong>{{ $schedule->route }}</strong>
+                            @else
+                                <span class="badge bg-secondary">Semua route</span>
+                            @endif
+                        </td>
                         <td>
                             @if ($schedule->dock_code)
                                 <strong>{{ $schedule->dock_code }}</strong>
@@ -159,6 +167,7 @@
                                         style="border-radius: 6px 0 0 6px; margin: 0;"
                                         title="Edit"
                                         data-id="{{ $schedule->id }}"
+                                        data-route="{{ $schedule->route }}"
                                         data-dock="{{ $schedule->dock_code }}"
                                         data-cycle="{{ $schedule->cycle }}"
                                         data-jam="{{ substr($schedule->jam_keluar, 0, 5) }}"
@@ -178,10 +187,10 @@
                     </tr>
                 @empty
                     <tr class="mt-3">
-                        <td colspan="6" class="text-center py-4">
+                        <td colspan="7" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-                                <p class="mt-2">Belum ada jadwal cycle</p>
+                                <p class="mt-2">Belum ada jadwal</p>
                             </div>
                         </td>
                     </tr>
@@ -199,6 +208,7 @@
             <thead>
                 <tr class="fs-6">
                     <th>Manifest No</th>
+                    <th>Route</th>
                     <th>Dock</th>
                     <th>Cycle</th>
                     <th>Printer</th>
@@ -211,7 +221,8 @@
                 @forelse($logs as $log)
                     <tr class="fs-5">
                         <td><strong>{{ $log->manifest_no }}</strong></td>
-                        <td>{{ $logDocks[$log->manifest_no] ?? '-' }}</td>
+                        <td>{{ $logManifests[$log->manifest_no]->route ?? '-' }}</td>
+                        <td>{{ $logManifests[$log->manifest_no]->dock_code ?? '-' }}</td>
                         <td>{{ $log->cycle }}</td>
                         <td>{{ $log->printer_name ?? '-' }}</td>
                         <td>
@@ -243,7 +254,7 @@
                     </tr>
                 @empty
                     <tr class="mt-3">
-                        <td colspan="7" class="text-center py-4">
+                        <td colspan="8" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Belum ada riwayat auto print</p>
@@ -268,6 +279,11 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Route</label>
+                            <input type="text" name="route" class="form-control text-uppercase" list="routeSuggestions" placeholder="contoh: RC13 (kosongkan = semua route)" value="{{ old('route') }}" autocomplete="off">
+                            <div class="form-text">Kosongkan kalau jadwal ini berlaku untuk semua route.</div>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Dock</label>
                             <input type="text" name="dock_code" class="form-control text-uppercase" list="dockSuggestions" placeholder="contoh: 4P (kosongkan = semua dock)" value="{{ old('dock_code') }}" autocomplete="off">
@@ -305,6 +321,13 @@
         @endforeach
     </datalist>
 
+    {{-- Saran route: route yang ada di data kanban TMMIN + yang sudah dipakai di schedule --}}
+    <datalist id="routeSuggestions">
+        @foreach ($routeOptions as $route)
+            <option value="{{ $route }}"></option>
+        @endforeach
+    </datalist>
+
     {{-- Saran dock: dock yang ada di data kanban TMMIN + yang sudah dipakai di schedule --}}
     <datalist id="dockSuggestions">
         @foreach ($dockOptions as $dock)
@@ -326,6 +349,11 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Route</label>
+                            <input type="text" name="route" id="edit_route" class="form-control text-uppercase" list="routeSuggestions" placeholder="contoh: RC13 (kosongkan = semua route)" autocomplete="off">
+                            <div class="form-text">Kosongkan kalau jadwal ini berlaku untuk semua route.</div>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Dock</label>
                             <input type="text" name="dock_code" id="edit_dock_code" class="form-control text-uppercase" list="dockSuggestions" placeholder="contoh: 4P (kosongkan = semua dock)" autocomplete="off">
@@ -375,6 +403,7 @@
             const $printerField = $('#edit_printer_name');
 
             $('#editScheduleForm').attr('action', '{{ url('kbntmmin-schedule') }}/' + id);
+            $('#edit_route').val($(this).attr('data-route') || '');
             $('#edit_dock_code').val($(this).attr('data-dock') || '');
             $('#edit_cycle').val($(this).attr('data-cycle'));
             $('#edit_jam_keluar').val($(this).attr('data-jam'));

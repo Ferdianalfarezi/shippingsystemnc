@@ -148,8 +148,12 @@ class PrepMonitoringController extends Controller
                     'dock'             => $preparation->dock,
                     'route'            => $preparation->route,
                     'pr_number'        => $existing->pr_number,
+                    'pr_label'         => $existing->pr_label,
                     'shipping_address' => $existing->shipping_address,
                     'progress'         => $existing->pr_count . '/' . $existing->skid,
+                    'skid'             => $existing->skid,
+                    // DN ini yang terakhir? → jalur Preparation minta pilih Shipping dulu
+                    'is_last'          => $existing->pr_count + 1 >= $existing->skid,
                 ],
             ]);
         }
@@ -287,6 +291,11 @@ class PrepMonitoringController extends Controller
             $isComplete = $monitoring->pr_count >= $monitoring->skid;
 
             if ($isComplete && $monitoring->status !== 'ok') {
+                // Grup yang dimulai dari jalur Preparation belum punya shipping → pakai Matrix
+                if (empty($monitoring->shipping_address)) {
+                    $monitoring->shipping_address = $this->determineShippingAddress($preparation);
+                }
+
                 $monitoring->status        = 'ok';
                 $monitoring->start_ship_at = Carbon::now();
                 $monitoring->save();
@@ -315,11 +324,13 @@ class PrepMonitoringController extends Controller
     }
 
     /**
-     * Proses scan (JALUR PREPARATION - BARU).
-     * DN langsung dipindah ke Shipping saat itu juga (gak nunggu skid penuh),
-     * dengan shipping_address MANUAL (dari modal), bukan hasil Matrix.
-     * Baris PrepMonitoring tetap dibuat/di-update supaya progress (mis. 1/4) ikut kelihatan
-     * di Shipping Area Monitoring, dan otomatis ditutup ('ok') begitu skid penuh.
+     * Proses scan (JALUR PREPARATION - panah Move to Shipping / scan di halaman Preparation).
+     * - DN pertama kombinasi baru: wajib pilih PR. Shipping BELUM dipilih.
+     * - DN selanjutnya: progress naik (mis. 2/4). DN tetap di Preparation, shipping masih kosong.
+     * - DN terakhir (progress = skid): wajib pilih Shipping (manual, bukan Matrix), lalu SEMUA DN
+     *   di grup ini dipindah bersamaan ke Shipping tsb & grup ditutup ('ok').
+     * Kalau DN terakhir dikirim tanpa shipping → 422 + needs_shipping_selection supaya front-end
+     * munculin modal pilih Shipping.
      */
     public function scanDirect(Request $request)
     {
@@ -360,20 +371,28 @@ class PrepMonitoringController extends Controller
                 ->lockForUpdate()
                 ->first();
 
+            $shippingAddress = $validated['shipping_address'] ?? null;
+
             if (!$monitoring) {
-                if (empty($validated['pr_number']) || empty($validated['shipping_address'])) {
+                if (empty($validated['pr_number'])) {
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
-                        'message' => 'Pilih Preparation (PR) dan Shipping terlebih dahulu untuk kombinasi baru ini',
+                        'message' => 'Pilih Preparation (PR) terlebih dahulu untuk kombinasi baru ini',
                     ], 422);
                 }
 
-                $skid = Preparation::where('customers', $preparation->customers)
+                $skid = max(Preparation::where('customers', $preparation->customers)
                     ->where('cycle', $preparation->cycle)
                     ->where('dock', $preparation->dock)
                     ->whereDate('delivery_date', $groupDate)
-                    ->count();
+                    ->count(), 1);
+
+                // Skid cuma 1 → DN pertama sekaligus terakhir, shipping harus dipilih sekarang
+                if ($skid <= 1 && empty($shippingAddress)) {
+                    DB::rollBack();
+                    return $this->needsShippingSelection($preparation);
+                }
 
                 $kbn = Preparation::where('customers', $preparation->customers)
                     ->where('cycle', $preparation->cycle)
@@ -387,10 +406,10 @@ class PrepMonitoringController extends Controller
                     'dock'             => $preparation->dock,
                     'route'            => $preparation->route,
                     'kbn'              => $kbn,
-                    'skid'             => max($skid, 1),
+                    'skid'             => $skid,
                     'pr_number'        => $validated['pr_number'],
                     'pr_count'         => 1,
-                    'shipping_address' => $validated['shipping_address'], // manual, bukan matrix
+                    'shipping_address' => null, // dipilih setelah DN terakhir
                     'ship_count'       => 1,
                     'status'           => 'in_progress',
                     'scanned_dns'      => [$preparation->no_dn],
@@ -399,6 +418,13 @@ class PrepMonitoringController extends Controller
                     'etd_time'         => $preparation->delivery_time,
                 ]);
             } else {
+                // DN terakhir wajib bawa shipping (kecuali grup lama yang shipping-nya sudah terisi)
+                $willComplete = $monitoring->pr_count + 1 >= $monitoring->skid;
+                if ($willComplete && empty($shippingAddress) && empty($monitoring->shipping_address)) {
+                    DB::rollBack();
+                    return $this->needsShippingSelection($preparation);
+                }
+
                 $scannedDns   = $monitoring->scanned_dns ?? [];
                 $scannedDns[] = $preparation->no_dn;
 
@@ -414,16 +440,19 @@ class PrepMonitoringController extends Controller
                 $monitoring->save();
             }
 
-            // Beda dari scan() biasa: DN ini langsung dipindah ke Shipping sekarang juga,
-            // pakai shipping_address yang tersimpan di row (baru diisi manual atau reuse yang lama).
-            $this->moveSingleToShipping($preparation, $monitoring->shipping_address);
-
             $isComplete = $monitoring->pr_count >= $monitoring->skid;
 
             if ($isComplete && $monitoring->status !== 'ok') {
+                if (!empty($shippingAddress)) {
+                    $monitoring->shipping_address = $shippingAddress; // manual, bukan Matrix
+                }
+
                 $monitoring->status        = 'ok';
                 $monitoring->start_ship_at = Carbon::now();
                 $monitoring->save();
+
+                // Semua DN grup ini (yang masih di Preparation) dipindah bersamaan
+                $this->bulkMoveToShipping($monitoring);
             }
 
             DB::commit();
@@ -431,8 +460,10 @@ class PrepMonitoringController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $isComplete
-                    ? 'DN ' . $preparation->no_dn . ' dipindahkan ke ' . $monitoring->shipping_address . '. ' . $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . ')!'
-                    : 'DN ' . $preparation->no_dn . ' dipindahkan ke ' . $monitoring->shipping_address . '. Progress ' . $monitoring->pr_label . ': ' . $monitoring->pr_count . '/' . $monitoring->skid,
+                    ? $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . '). '
+                        . count($monitoring->scanned_dns ?? []) . ' DN dipindahkan ke ' . $monitoring->shipping_address . '!'
+                    : 'DN ' . $preparation->no_dn . ' masuk ' . $monitoring->pr_label . '. Progress: '
+                        . $monitoring->pr_count . '/' . $monitoring->skid . '. Shipping dipilih setelah DN terakhir.',
                 'data' => $monitoring->fresh(),
             ]);
 
@@ -446,8 +477,18 @@ class PrepMonitoringController extends Controller
         }
     }
 
+    /** Respon 422 untuk jalur Preparation: DN terakhir, front-end harus munculin modal pilih Shipping. */
+    private function needsShippingSelection(Preparation $preparation)
+    {
+        return response()->json([
+            'success' => false,
+            'needs_shipping_selection' => true,
+            'message' => 'DN ' . $preparation->no_dn . ' adalah DN terakhir. Pilih Shipping terlebih dahulu.',
+        ], 422);
+    }
+
     /**
-     * Pindahkan semua DN yang sudah terkumpul di grup ini ke tabel Shipping (JALUR MONITORING),
+     * Pindahkan semua DN yang sudah terkumpul di grup ini ke tabel Shipping,
      * lalu hapus permanen dari preparations. Aman dipanggil walau sebagian DN sudah dipindah
      * duluan lewat jalur Preparation (moveSingleToShipping sudah cek duplikat).
      */

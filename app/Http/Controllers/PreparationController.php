@@ -80,7 +80,15 @@ class PreparationController extends Controller
     //     'is_delay' => Carbon::now()->greaterThan(Carbon::parse($testPrep->pulling_date->format('Y-m-d') . ' ' . $testPrep->pulling_time)),
     // ]);
     
-    return view('preparations.index', compact('preparations', 'totalDelay', 'totalOnTime', 'totalAll', 'recentScan'));
+    // DN yang sudah di-prep tapi grupnya belum selesai (shipping belum dipilih) → [no_dn => "PR 1 · 2/4"]
+    $inProgressDns = [];
+    foreach (\App\Models\PrepMonitoring::where('status', 'in_progress')->get() as $monitoring) {
+        foreach ($monitoring->scanned_dns ?? [] as $dn) {
+            $inProgressDns[$dn] = $monitoring->pr_label . ' · ' . $monitoring->pr_count . '/' . $monitoring->skid;
+        }
+    }
+
+    return view('preparations.index', compact('preparations', 'totalDelay', 'totalOnTime', 'totalAll', 'recentScan', 'inProgressDns'));
 }
 
     public function create()

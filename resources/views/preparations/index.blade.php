@@ -249,6 +249,11 @@
                                 title="{{ $prep->status === 'delay' ? 'Terlambat ' . $prep->delay_duration : 'On Time' }}">
                                 {{ $prep->status_label }}
                             </span>
+                            @isset($inProgressDns[$prep->no_dn])
+                                <span class="badge bg-info text-dark fw-bold px-2 py-2 mb-1 mt-1" title="Sudah di-prep, menunggu DN terakhir untuk pilih Shipping">
+                                    <i class="bi bi-hourglass-split"></i> {{ $inProgressDns[$prep->no_dn] }}
+                                </span>
+                            @endisset
                         </td>
                         <td>
                             <div class="d-flex justify-content-center" style="gap: 0;">
@@ -293,12 +298,12 @@
         {{ $preparations->links() }}
     </div>
 
-    <!-- Modal Pilih PR & Shipping (kombinasi baru via halaman Preparation) -->
+    <!-- Modal 1: Pilih PR (DN pertama kombinasi baru). Shipping BELUM dipilih di sini. -->
     <div class="modal fade" id="selectPrShippingModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">Pilih PR & Shipping</h5>
+                    <h5 class="modal-title">Pilih Preparation (PR)</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -312,6 +317,27 @@
                         <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 pr-shipping-pr-btn" data-pr="4">PR 4</button></div>
                         <div class="col-12"><button type="button" class="btn btn-outline-primary w-100 pr-shipping-pr-btn" data-pr="5">AB (Abnormal)</button></div>
                     </div>
+
+                    <div class="form-text mb-3">Shipping dipilih nanti setelah DN terakhir grup ini di-prep.</div>
+
+                    <button type="button" class="btn btn-success w-100" id="confirmPrShippingBtn">
+                        <i class="bi bi-check-circle me-1"></i> Konfirmasi
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Pilih Shipping (cuma muncul di DN terakhir) → semua DN grup dipindah bersamaan -->
+    <div class="modal fade" id="selectShippingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Pilih Shipping</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="selectShippingInfo" class="mb-3 small text-muted"></div>
 
                     <label class="form-label fw-bold">Shipping</label>
                     <select class="form-select mb-3" id="shippingAddressSelect">
@@ -328,7 +354,7 @@
                         </optgroup>
                     </select>
 
-                    <button type="button" class="btn btn-success w-100" id="confirmPrShippingBtn">
+                    <button type="button" class="btn btn-success w-100" id="confirmShippingBtn">
                         <i class="bi bi-check-circle me-1"></i> Konfirmasi & Pindahkan
                     </button>
                 </div>
@@ -356,9 +382,24 @@
     // ==================== SCAN DN TO SHIPPING (langsung, address manual) ====================
     // Scope GLOBAL (di luar $(document).ready) supaya bisa dipanggil juga dari
     // openMoveToShippingModal() yang dipicu onclick panah di kolom Actions.
+    // Alur: DN pertama → pilih PR. DN selanjutnya → langsung progress (mis. 2/4).
+    // DN terakhir → pilih Shipping → semua DN grup dipindah bersamaan.
     let scanTimeout;
     let pendingNoDn = null;
+    let pendingSkid = null;
     let selectedPrNumber = null;
+
+    // State untuk modal pilih Shipping (DN terakhir)
+    let shippingNoDn = null;
+    let shippingPrNumber = null;
+
+    function openShippingModal(noDn, prNumber, infoHtml) {
+        shippingNoDn = noDn;
+        shippingPrNumber = prNumber;
+        $('#selectShippingInfo').html(infoHtml || `<strong>DN:</strong> ${noDn}`);
+        $('#shippingAddressSelect').val('');
+        new bootstrap.Modal(document.getElementById('selectShippingModal')).show();
+    }
 
     // withConfirm = true dipakai buat klik panah "Move to Shipping" di Actions
     // (biar ga langsung eksekusi tanpa konfirmasi kalau kombinasinya udah ada)
@@ -384,6 +425,7 @@
                 if (response.needs_pr_selection) {
                     pendingNoDn = noDn;
                     const d = response.data;
+                    pendingSkid = d.skid;
                     $('#selectPrShippingInfo').html(`
                         <strong>DN:</strong> ${d.no_dn}<br>
                         <strong>Customer:</strong> ${d.customers} | <strong>Cycle:</strong> ${d.cycle} | <strong>Dock:</strong> ${d.dock}<br>
@@ -395,32 +437,46 @@
 
                 const d = response.data;
 
+                // DN terakhir grup yang shipping-nya belum dipilih → langsung modal pilih Shipping
+                const needsShipping = d.is_last && !d.shipping_address;
+                const proceed = function() {
+                    if (needsShipping) {
+                        openShippingModal(noDn, null, `
+                            <strong>DN terakhir:</strong> ${d.no_dn}<br>
+                            <strong>Route:</strong> ${d.route} | <strong>Dock:</strong> ${d.dock} | <strong>Cycle:</strong> ${d.cycle}<br>
+                            <strong>${d.pr_label}</strong> → selesai ${d.skid}/${d.skid}. Semua DN grup ini akan dipindah ke Shipping yang dipilih.
+                        `);
+                    } else {
+                        executeScanDirect(noDn, null, null);
+                    }
+                };
+
                 if (withConfirm) {
                     Swal.fire({
-                        title: 'Pindahkan ke Shipping?',
+                        title: needsShipping ? 'DN terakhir, lanjut pilih Shipping?' : 'Masukkan ke ' + d.pr_label + '?',
                         html: `
                             <div class="text-start">
                                 <small><strong>DN:</strong> ${d.no_dn}</small><br>
                                 <small><strong>Route:</strong> ${d.route} | <strong>Dock:</strong> ${d.dock} | <strong>Cycle:</strong> ${d.cycle}</small>
                             </div>
-                            <div class="text-muted small mt-2">Tujuan: <strong>${d.shipping_address}</strong> (Progress saat ini: ${d.progress})</div>
+                            <div class="text-muted small mt-2"><strong>${d.pr_label}</strong> — progress saat ini: ${d.progress}</div>
                         `,
                         icon: 'question',
                         showCancelButton: true,
                         confirmButtonColor: '#0d6efd',
                         cancelButtonColor: '#6c757d',
-                        confirmButtonText: 'Ya, Pindahkan!',
+                        confirmButtonText: needsShipping ? 'Ya, Pilih Shipping' : 'Ya, Lanjut!',
                         cancelButtonText: 'Batal',
                         reverseButtons: true
                     }).then((result) => {
                         if (result.isConfirmed) {
-                            executeScanDirect(noDn, null, null);
+                            proceed();
                         } else {
                             $('#scanDnInput').val('').focus();
                         }
                     });
                 } else {
-                    executeScanDirect(noDn, null, null);
+                    proceed();
                 }
             },
             error: function(xhr) {
@@ -459,6 +515,15 @@
                 });
             },
             error: function(xhr) {
+                // Server bilang ini DN terakhir & shipping belum dipilih → munculin modal Shipping
+                if (xhr.responseJSON?.needs_shipping_selection) {
+                    openShippingModal(noDn, prNumber, `
+                        <strong>DN terakhir:</strong> ${noDn}<br>
+                        Semua DN grup ini akan dipindah ke Shipping yang dipilih.
+                    `);
+                    return;
+                }
+
                 Swal.fire({
                     title: 'Gagal!',
                     text: xhr.responseJSON?.message || 'Terjadi kesalahan saat memindahkan data',
@@ -503,27 +568,59 @@
             $(this).removeClass('btn-outline-primary').addClass('btn-primary');
         });
 
+        // Modal 1: konfirmasi PR
         $('#confirmPrShippingBtn').on('click', function() {
-            const shippingAddress = $('#shippingAddressSelect').val();
-
             if (!selectedPrNumber) {
                 Swal.fire({ title: 'Pilih PR dulu!', icon: 'warning', confirmButtonColor: '#dc2626', timer: 1800, timerProgressBar: true });
                 return;
             }
+
+            // Simpan dulu, karena event hidden di bawah me-reset state modal PR
+            const noDn = pendingNoDn;
+            const prNumber = selectedPrNumber;
+            const skid = pendingSkid;
+
+            bootstrap.Modal.getInstance(document.getElementById('selectPrShippingModal')).hide();
+
+            if (skid !== null && skid <= 1) {
+                // Skid cuma 1 → DN pertama sekaligus terakhir, langsung pilih Shipping
+                openShippingModal(noDn, prNumber, `
+                    <strong>DN:</strong> ${noDn}<br>
+                    Skid cuma 1, jadi DN ini langsung selesai. Pilih Shipping tujuannya.
+                `);
+            } else {
+                executeScanDirect(noDn, prNumber, null);
+            }
+        });
+
+        $('#selectPrShippingModal').on('hidden.bs.modal', function() {
+            pendingNoDn = null;
+            pendingSkid = null;
+            selectedPrNumber = null;
+            $('.pr-shipping-pr-btn').removeClass('btn-primary').addClass('btn-outline-primary');
+        });
+
+        // Modal 2: konfirmasi Shipping (DN terakhir) → pindahkan semua DN grup
+        $('#confirmShippingBtn').on('click', function() {
+            const shippingAddress = $('#shippingAddressSelect').val();
+
             if (!shippingAddress) {
                 Swal.fire({ title: 'Pilih Shipping dulu!', icon: 'warning', confirmButtonColor: '#dc2626', timer: 1800, timerProgressBar: true });
                 return;
             }
 
-            bootstrap.Modal.getInstance(document.getElementById('selectPrShippingModal')).hide();
-            executeScanDirect(pendingNoDn, selectedPrNumber, shippingAddress);
+            const noDn = shippingNoDn;
+            const prNumber = shippingPrNumber;
+
+            bootstrap.Modal.getInstance(document.getElementById('selectShippingModal')).hide();
+            executeScanDirect(noDn, prNumber, shippingAddress);
         });
 
-        $('#selectPrShippingModal').on('hidden.bs.modal', function() {
-            pendingNoDn = null;
-            selectedPrNumber = null;
+        $('#selectShippingModal').on('hidden.bs.modal', function() {
+            shippingNoDn = null;
+            shippingPrNumber = null;
             $('#shippingAddressSelect').val('');
-            $('.pr-shipping-pr-btn').removeClass('btn-primary').addClass('btn-outline-primary');
+            $('#scanDnInput').val('').focus();
         });
 
         // Delete confirmation dengan SweetAlert

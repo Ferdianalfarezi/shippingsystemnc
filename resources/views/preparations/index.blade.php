@@ -244,14 +244,16 @@
                         <td>{{ $prep->pulling_date->format('d-m-y') }}</td>
                         <td>{{ date('H:i:s', strtotime($prep->pulling_time)) }}</td>
                         <td>
-                            <span class="badge {{ $prep->status_badge }} fw-bold px-3 py-2 mb-1 mt-1 ms-1 me-1
-                                {{ $prep->status === 'delay' ? 'badge-delay' : '' }}"
-                                title="{{ $prep->status === 'delay' ? 'Terlambat ' . $prep->delay_duration : 'On Time' }}">
-                                {{ $prep->status_label }}
-                            </span>
                             @isset($inProgressDns[$prep->no_dn])
-                                <span class="badge bg-info text-dark fw-bold px-2 py-2 mb-1 mt-1" title="Sudah di-prep, menunggu DN terakhir untuk pilih Shipping">
+                                {{-- Sudah di-prep, tinggal nunggu DN terakhir → cukup tampilkan progress-nya --}}
+                                <span class="badge fw-bold px-3 py-2 mb-1 mt-1 ms-1 me-1 text-white" style="background-color: #fd7e14;" title="Sudah di-prep, menunggu DN terakhir untuk pilih Shipping">
                                     <i class="bi bi-hourglass-split"></i> {{ $inProgressDns[$prep->no_dn] }}
+                                </span>
+                            @else
+                                <span class="badge {{ $prep->status_badge }} fw-bold px-3 py-2 mb-1 mt-1 ms-1 me-1
+                                    {{ $prep->status === 'delay' ? 'badge-delay' : '' }}"
+                                    title="{{ $prep->status === 'delay' ? 'Terlambat ' . $prep->delay_duration : 'On Time' }}">
+                                    {{ $prep->status_label }}
                                 </span>
                             @endisset
                         </td>

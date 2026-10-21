@@ -85,10 +85,9 @@ class PreparationController extends Controller
     foreach (\App\Models\PrepMonitoring::where('status', 'in_progress')->get() as $monitoring) {
         $monitoring->syncSkid(); // betulkan skid grup lama (sebelum route jadi kunci grup)
 
-        $label = $monitoring->pr_label . ' · ' . $monitoring->pr_count . '/' . $monitoring->skid;
-
-        foreach ($monitoring->scanned_dns ?? [] as $dn) {
-            $inProgressDns[$dn] = $label;
+        // Tiap DN tampil urutannya sendiri saat discan (1/9, 2/9, ...), bukan progress grup
+        foreach (array_values($monitoring->scanned_dns ?? []) as $i => $dn) {
+            $inProgressDns[$dn] = $monitoring->pr_label . ' · ' . ($i + 1) . '/' . $monitoring->skid;
         }
     }
 

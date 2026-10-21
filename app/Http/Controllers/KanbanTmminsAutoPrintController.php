@@ -61,7 +61,7 @@ class KanbanTmminsAutoPrintController extends Controller
             ];
         }
 
-        $dueSchedules = $printerSchedules->filter(fn ($schedule) => $schedule->jam_keluar <= $nowTime);
+        $dueSchedules = $printerSchedules->filter(fn ($schedule) => $schedule->isDue());
         if ($dueSchedules->isEmpty()) {
             return response()->json($response);
         }

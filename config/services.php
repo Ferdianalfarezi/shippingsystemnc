@@ -47,6 +47,10 @@ return [
         // noscale | fit | shrink (bisa ditambah, misal "noscale,paper=A4")
         'sumatra_settings' => env('AUTO_PRINT_SUMATRA_SETTINGS', 'noscale'),
 
+        // toleransi (menit) setelah jam keluar: jadwal masih diproses kalau scheduler telat.
+        // Lewat dari ini tidak dikejar lagi (upload data kapanpun tidak memicu cetak cycle yang jamnya sudah lewat)
+        'window_minutes' => (int) env('AUTO_PRINT_WINDOW_MINUTES', 10),
+
         // ukuran halaman PDF (CSS @page size), kosong = default Chrome (Letter)
         'page_size' => env('AUTO_PRINT_PAGE_SIZE', '219mm 79mm'),
 

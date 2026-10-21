@@ -46,6 +46,20 @@ class KbntmminSchedule extends Model
     }
 
     /**
+     * Jadwal ini waktunya keluar sekarang? Keluar di jam_keluar, dengan toleransi beberapa menit
+     * (services.auto_print.window_minutes) kalau scheduler telat/server sempat mati.
+     * Lewat dari jendela itu tidak dikejar lagi → upload data malam tidak memicu cetak cycle pagi.
+     */
+    public function isDue(?\Carbon\Carbon $now = null): bool
+    {
+        $now ??= now();
+        $start = $now->copy()->setTimeFromTimeString((string) $this->jam_keluar);
+        $end = $start->copy()->addMinutes((int) config('services.auto_print.window_minutes', 10));
+
+        return $now->gte($start) && $now->lt($end);
+    }
+
+    /**
      * Samakan format route (" rc13" → "RC13"). Kosong → null (= semua route).
      */
     public static function normalizeRoute($route): ?string

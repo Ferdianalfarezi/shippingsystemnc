@@ -23,11 +23,12 @@ class KanbanTmminAutoPrint extends Command
         $this->cleanupOldPdf();
 
         $now = now();
-        $nowTime = $now->format('H:i:s');
         $stamp = '[' . $now->format('Y-m-d H:i:s') . ']';
 
+        // Cuma jadwal yang jam keluarnya SEKARANG (+ toleransi beberapa menit).
+        // Jam yang sudah lama lewat tidak dikejar, jadi upload data kapanpun tidak memicu cetak.
         $allSchedules = KbntmminSchedule::orderBy('jam_keluar')->get();
-        $dueSchedules = $allSchedules->filter(fn ($schedule) => $schedule->jam_keluar <= $nowTime);
+        $dueSchedules = $allSchedules->filter(fn ($schedule) => $schedule->isDue($now));
 
         if ($dueSchedules->isEmpty()) {
             $this->line("{$stamp} Belum ada cycle yang waktunya keluar.");

@@ -75,13 +75,21 @@ class KbntmminScheduleController extends Controller
 
             $manifestNos = $plan['kanbans']->pluck('manifest_no')->unique();
 
-            $reset = $manifestNos->isEmpty() ? 0 : KbntmminPrintLog::where('cycle', KbntmminSchedule::normalizeCycle($schedule->cycle))
-                ->whereIn('manifest_no', $manifestNos)
-                ->whereDate('printed_at', today())
-                ->delete();
+            if ($manifestNos->isNotEmpty()) {
+                KbntmminPrintLog::where('cycle', KbntmminSchedule::normalizeCycle($schedule->cycle))
+                    ->whereIn('manifest_no', $manifestNos)
+                    ->whereDate('printed_at', today())
+                    ->delete();
+            }
 
-            if ($reset > 0) {
-                $text .= " Akan di-print ulang jam {$data['jam_keluar']}.";
+            $jam = $data['jam_keluar'];
+            if ($schedule->isDue()) {
+                $text .= " Akan keluar dalam 1 menit.";
+            } elseif ($jam > now()->format('H:i')) {
+                $text .= " Akan keluar jam {$jam}.";
+            } else {
+                $window = (int) config('services.auto_print.window_minutes', 10);
+                $text .= " Jam {$jam} sudah lewat lebih dari {$window} menit, jadi tidak keluar hari ini (besok keluar jam {$jam}).";
             }
         }
 

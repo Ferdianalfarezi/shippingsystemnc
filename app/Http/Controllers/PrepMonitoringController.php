@@ -409,7 +409,8 @@ class PrepMonitoringController extends Controller
                     'skid'             => $skid,
                     'pr_number'        => $validated['pr_number'],
                     'pr_count'         => 1,
-                    'shipping_address' => null, // dipilih setelah DN terakhir
+                    // Dipilih setelah DN terakhir; skid 1 = DN ini sudah terakhir, jadi langsung diisi
+                    'shipping_address' => $skid <= 1 ? $shippingAddress : null,
                     'ship_count'       => 1,
                     'status'           => 'in_progress',
                     'scanned_dns'      => [$preparation->no_dn],

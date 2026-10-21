@@ -60,13 +60,17 @@ class KanbanTmminAutoPrint extends Command
                 continue;
             }
 
-            $this->processCycle($stamp, $schedule->label, $cycle, trim($schedule->printer_name), $row['pending']);
+            // Kanban P1 & P2 dicetak terpisah (halaman print & id tabelnya beda)
+            foreach ($row['pending']->groupBy('source') as $source => $pending) {
+                $jobLabel = $schedule->label . ($source === 'p2' ? ' P2' : '');
+                $this->processCycle($stamp, $jobLabel, $cycle, trim($schedule->printer_name), $pending, $source);
+            }
         }
 
         return self::SUCCESS;
     }
 
-    private function processCycle(string $stamp, string $label, string $cycle, string $printer, Collection $pending): void
+    private function processCycle(string $stamp, string $label, string $cycle, string $printer, Collection $pending, string $source): void
     {
         $ids = $pending->pluck('id')->implode(',');
         $manifestNos = $pending->pluck('manifest_no')->unique()->values();
@@ -77,7 +81,7 @@ class KanbanTmminAutoPrint extends Command
         $error = null;
 
         try {
-            $pdfPath = $this->renderPdf($ids, $label);
+            $pdfPath = $this->renderPdf($ids, $label, $source);
             $this->line("  PDF: {$pdfPath}");
 
             $this->sendToPrinter($pdfPath, $printer);
@@ -108,7 +112,7 @@ class KanbanTmminAutoPrint extends Command
      * Buka halaman print (route auto-print.print) pakai Chrome headless
      * lalu simpan jadi PDF. Return: path file PDF.
      */
-    private function renderPdf(string $ids, string $label): string
+    private function renderPdf(string $ids, string $label, string $source = 'p1'): string
     {
         $chrome = config('services.auto_print.chrome_path');
         if (!is_file($chrome)) {
@@ -129,6 +133,7 @@ class KanbanTmminAutoPrint extends Command
             . route('kanbantmmins.autoprint.print', [
                 'token' => config('services.auto_print.token'),
                 'ids' => $ids,
+                'source' => $source,
                 'pdf' => 1,
             ], false);
 

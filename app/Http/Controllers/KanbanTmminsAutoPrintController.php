@@ -76,15 +76,20 @@ class KanbanTmminsAutoPrintController extends Controller
 
             $schedule = $row['schedule'];
 
+            // P1 & P2 dikirim satu per satu (id tabelnya beda); agent harus kirim balik `source` ke /print
+            $source = $row['pending']->contains('source', 'p1') ? 'p1' : 'p2';
+            $pending = $row['pending']->where('source', $source);
+
             return response()->json(array_merge($response, [
                 'due' => true,
                 'cycle' => KbntmminSchedule::normalizeCycle($schedule->cycle),
                 'route' => $schedule->route,
                 'dock_code' => $schedule->dock_code,
-                'label' => $schedule->label,
+                'label' => $schedule->label . ($source === 'p2' ? ' P2' : ''),
+                'source' => $source,
                 'jam_keluar' => substr($schedule->jam_keluar, 0, 5),
-                'manifest_nos' => $row['pending']->pluck('manifest_no')->unique()->values(),
-                'ids' => $row['pending']->pluck('id')->values(),
+                'manifest_nos' => $pending->pluck('manifest_no')->unique()->values(),
+                'ids' => $pending->pluck('id')->values(),
             ]));
         }
 
@@ -102,6 +107,7 @@ class KanbanTmminsAutoPrintController extends Controller
 
         $request->validate([
             'ids' => 'required|string',
+            'source' => 'nullable|in:p1,p2',
         ]);
 
         $printRequest = new Request([
@@ -109,7 +115,10 @@ class KanbanTmminsAutoPrintController extends Controller
             'plant' => 'all',
         ]);
 
-        $response = app(KanbanTmminsController::class)->printSelected($printRequest);
+        // source=p2 → id dari tabel kanban_tmmins_p2, pakai halaman print P2
+        $response = $request->input('source') === 'p2'
+            ? app(KanbanTmminsP2Controller::class)->printSelected($printRequest)
+            : app(KanbanTmminsController::class)->printSelected($printRequest);
 
         // Mode PDF (dipakai command kanban:tmmin-auto-print): paksa ukuran halaman
         // supaya PDF pas dengan kanban, bukan Letter. Kiosk tidak kirim pdf=1.

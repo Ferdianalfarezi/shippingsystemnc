@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\KanbanTmmins;
+use App\Models\KanbanTmminsP2;
 use App\Models\KbntmminSchedule;
 use App\Models\KbntmminPrintLog;
 use App\Services\KanbanTmminAutoPrintPlanner;
@@ -18,23 +19,34 @@ class KbntmminScheduleController extends Controller
         $logs = KbntmminPrintLog::orderByDesc('printed_at')->limit(50)->get();
         $printers = $this->getInstalledPrinters();
 
-        // Route & dock tiap manifest di riwayat (1 manifest = 1 route & 1 dock)
-        $logManifests = KanbanTmmins::whereIn('manifest_no', $logs->pluck('manifest_no')->unique())
-            ->get(['manifest_no', 'route', 'dock_code'])
+        // Route & dock tiap manifest di riwayat (1 manifest = 1 route & 1 dock), dari P1 & P2
+        $logManifestNos = $logs->pluck('manifest_no')->unique();
+        $logManifests = KanbanTmmins::whereIn('manifest_no', $logManifestNos)->get(['manifest_no', 'route', 'dock_code'])
+            ->toBase()
+            ->merge(KanbanTmminsP2::whereIn('manifest_no', $logManifestNos)->get(['manifest_no', 'route', 'dock_code']))
             ->keyBy('manifest_no');
 
-        // Saran route & dock di form: yang ada di data kanban + yang sudah dipakai di schedule
+        // Jumlah kanban (P1 + P2) yang cocok ke tiap jadwal → kelihatan kalau datanya memang kosong
+        $scheduleKanbans = app(KanbanTmminAutoPrintPlanner::class)->plan($schedules)
+            ->map(fn ($row) => [
+                'p1' => $row['kanbans']->where('source', 'p1')->count(),
+                'p2' => $row['kanbans']->where('source', 'p2')->count(),
+            ]);
+
+        // Saran route & dock di form: yang ada di data kanban P1 & P2 + yang sudah dipakai di schedule
         $routeOptions = KanbanTmmins::query()->distinct()->pluck('route')
+            ->merge(KanbanTmminsP2::query()->distinct()->pluck('route'))
             ->merge($schedules->pluck('route'))
             ->map(fn ($route) => KbntmminSchedule::normalizeRoute($route))
             ->filter()->unique()->sort()->values();
 
         $dockOptions = KanbanTmmins::query()->distinct()->pluck('dock_code')
+            ->merge(KanbanTmminsP2::query()->distinct()->pluck('dock_code'))
             ->merge($schedules->pluck('dock_code'))
             ->map(fn ($dock) => KbntmminSchedule::normalizeDock($dock))
             ->filter()->unique()->sort()->values();
 
-        return view('kbntmmin_schedule.index', compact('schedules', 'logs', 'printers', 'logManifests', 'routeOptions', 'dockOptions'));
+        return view('kbntmmin_schedule.index', compact('schedules', 'logs', 'printers', 'logManifests', 'scheduleKanbans', 'routeOptions', 'dockOptions'));
     }
 
     public function store(Request $request)

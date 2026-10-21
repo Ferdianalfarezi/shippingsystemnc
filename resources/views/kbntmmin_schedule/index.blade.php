@@ -121,6 +121,7 @@
                     <th>Route</th>
                     <th>Dock</th>
                     <th>Cycle</th>
+                    <th>Qty Kbn</th>
                     <th>Jam Keluar</th>
                     <th>Printer</th>
                     <th>Status Hari Ini</th>
@@ -145,6 +146,20 @@
                             @endif
                         </td>
                         <td><strong>{{ $schedule->cycle }}</strong></td>
+                        <td>
+                            @php
+                                $qty = $scheduleKanbans[$schedule->id] ?? ['p1' => 0, 'p2' => 0];
+                                $qtyTotal = $qty['p1'] + $qty['p2'];
+                            @endphp
+                            @if ($qtyTotal > 0)
+                                <strong>{{ $qtyTotal }}</strong>
+                                @if ($qty['p2'] > 0)
+                                    <div class="small text-muted" style="font-size: 0.75rem;">P1 {{ $qty['p1'] }} · P2 {{ $qty['p2'] }}</div>
+                                @endif
+                            @else
+                                <span class="badge bg-danger" title="Tidak ada data kanban (P1 / P2) untuk route, dock & cycle ini, jadi tidak akan keluar">0 (tidak ada data)</span>
+                            @endif
+                        </td>
                         <td><strong>{{ substr($schedule->jam_keluar, 0, 5) }}</strong></td>
                         <td>
                             @if (!empty($schedule->printer_name))
@@ -187,7 +202,7 @@
                     </tr>
                 @empty
                     <tr class="mt-3">
-                        <td colspan="7" class="text-center py-4">
+                        <td colspan="8" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Belum ada jadwal</p>

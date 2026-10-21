@@ -131,7 +131,8 @@ for ($i = 0; $i -lt 10; $i++) {
 
     try {
         # 1. Pastikan halaman print OK (bukan halaman error/403) sebelum dijadikan PDF
-        $printUrl = "$baseApi/print?token=$([uri]::EscapeDataString($token))&ids=$ids&pdf=1"
+        $source = if ($check.source) { [string]$check.source } else { 'p1' }
+        $printUrl = "$baseApi/print?token=$([uri]::EscapeDataString($token))&ids=$ids&source=$source&pdf=1"
         $probe = Invoke-WebRequest -Uri $printUrl -UseBasicParsing -TimeoutSec 60
         if ($probe.StatusCode -ne 200 -or $probe.Content -notmatch '</html>') {
             throw "Halaman print tidak valid (HTTP $($probe.StatusCode))"

@@ -3,12 +3,15 @@
 namespace App\Services;
 
 use App\Models\KanbanTmmins;
+use App\Models\KanbanTmminsP2;
 use App\Models\KbntmminPrintLog;
 use App\Models\KbntmminSchedule;
 use Illuminate\Support\Collection;
 
 /**
- * Pasangkan data kanban TMMIN ke master schedule auto print.
+ * Pasangkan data kanban TMMIN (P1: kanbantmmins + P2: kanban_tmmins_p2) ke master schedule auto print.
+ * Tiap kanban diberi atribut `source` ('p1' / 'p2') karena id kedua tabel bisa sama,
+ * jadi pemakai hasil plan() harus memisahkan cetakan per source.
  *
  * Schedule berlaku per route + dock + cycle. Route/dock yang dikosongkan berlaku
  * untuk semua route/dock di cycle tsb. Kalau 1 kanban cocok ke beberapa schedule,
@@ -52,7 +55,7 @@ class KanbanTmminAutoPrintPlanner
             ->mapWithKeys(fn ($log) => [$log->manifest_no . '|' . $log->cycle => true])
             ->all();
 
-        foreach (KanbanTmmins::all(['id', 'manifest_no', 'cycle', 'dock_code', 'route']) as $kanban) {
+        foreach ($this->allKanbans() as $kanban) {
             $cycle = KbntmminSchedule::normalizeCycle($kanban->cycle);
             $dock = KbntmminSchedule::normalizeDock($kanban->dock_code);
             $route = KbntmminSchedule::normalizeRoute($kanban->route);
@@ -79,6 +82,17 @@ class KanbanTmminAutoPrintPlanner
             'kanbans' => collect($row['kanbans']),
             'pending' => collect($row['pending']),
         ]);
+    }
+
+    /** Kanban P1 + P2, masing-masing ditandai source-nya. */
+    private function allKanbans(): Collection
+    {
+        $columns = ['id', 'manifest_no', 'cycle', 'dock_code', 'route'];
+
+        $p1 = KanbanTmmins::all($columns)->each(fn ($kanban) => $kanban->setAttribute('source', 'p1'));
+        $p2 = KanbanTmminsP2::all($columns)->each(fn ($kanban) => $kanban->setAttribute('source', 'p2'));
+
+        return $p1->toBase()->merge($p2->toBase());
     }
 
     private function key(?string $route, ?string $dock, string $cycle): string

@@ -60,7 +60,11 @@ class PrepMonitoringController extends Controller
                 }
             }
             return false;
-        })->values();
+        })
+        // Urut ETD terdekat dulu (tanggal grup + jam ETD); yang sudah lewat otomatis paling atas
+        ->sortBy(fn ($row) => ($row->group_date ? $row->group_date->format('Y-m-d') : '9999-12-31')
+            . ' ' . ($row->etd_time ?: '23:59:59'))
+        ->values();
 
         $this->attachDeliveryStatus($rows, $lookup);
 

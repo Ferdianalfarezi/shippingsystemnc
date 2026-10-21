@@ -200,14 +200,12 @@
                     <th rowspan="2">Cycle</th>
                     <th rowspan="2">Dock</th>
                     <th rowspan="2">Route</th>
-                    <th colspan="2">QTY</th>
+                    <th rowspan="2">Skid</th>
                     <th colspan="2">Time Start</th>
                     <th rowspan="2">ETD</th>
                     <th colspan="22">Status</th>
                 </tr>
                 <tr class="fs-6">
-                    <th>Kbn</th>
-                    <th>Skid</th>
                     <th>Prep</th>
                     <th>Ship</th>
                     <th>Pr 1</th>
@@ -260,7 +258,6 @@
                         <td>{{ $row->cycle }}</td>
                         <td>{{ $row->dock }}</td>
                         <td>{{ $row->route }}</td>
-                        <td>{{ $row->kbn ?? '-' }}</td>
                         <td>{{ $row->skid }}</td>
                         <td>{{ $row->start_prep_at ? $row->start_prep_at->format('H:i') : '-' }}</td>
                         <td>{{ $row->start_ship_at ? $row->start_ship_at->format('H:i') : '-' }}</td>
@@ -285,7 +282,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="31" class="text-center py-4">
+                        <td colspan="30" class="text-center py-4">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 3rem;"></i>
                                 <p class="mt-2">Semua data sudah diambil milkrun</p>

@@ -86,9 +86,6 @@ class PreparationController extends Controller
         $monitoring->syncSkid(); // betulkan skid grup lama (sebelum route jadi kunci grup)
 
         $label = $monitoring->pr_label . ' · ' . $monitoring->pr_count . '/' . $monitoring->skid;
-        if ($monitoring->pr_count >= $monitoring->skid && empty($monitoring->shipping_address)) {
-            $label .= ' · pilih shipping';
-        }
 
         foreach ($monitoring->scanned_dns ?? [] as $dn) {
             $inProgressDns[$dn] = $label;

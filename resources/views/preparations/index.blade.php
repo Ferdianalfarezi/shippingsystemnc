@@ -275,7 +275,7 @@
                                     <i class="bi bi-qr-code"></i>
                                 </a>
                                 
-                                <a href="javascript:void(0)" onclick="openMoveToShippingModal({{ $prep->id }})" class="btn btn-primary btn-sm btn-action-square" style="border-radius: 0 6px 6px 0; margin: 0;" title="Move to Shipping">
+                                <a href="javascript:void(0)" data-no-dn="{{ $prep->no_dn }}" onclick="checkDnForShipping(this.dataset.noDn, true)" class="btn btn-primary btn-sm btn-action-square" style="border-radius: 0 6px 6px 0; margin: 0;" title="Move to Shipping">
                                     <i class="bi bi-arrow-right"></i>
                                 </a>
                             </div>
@@ -383,7 +383,7 @@
 <script>
     // ==================== SCAN DN TO SHIPPING (langsung, address manual) ====================
     // Scope GLOBAL (di luar $(document).ready) supaya bisa dipanggil juga dari
-    // openMoveToShippingModal() yang dipicu onclick panah di kolom Actions.
+    // tombol panah (Move to Shipping) di kolom Actions.
     // Alur: DN pertama → pilih PR. DN selanjutnya → langsung progress (mis. 2/4).
     // DN terakhir → pilih Shipping → semua DN grup dipindah bersamaan.
     let scanTimeout;
@@ -1106,17 +1106,5 @@
     }
 
     // Open Move to Shipping (lewat panah Actions)
-    function openMoveToShippingModal(preparationId) {
-        $.ajax({
-            url: `/preparations/${preparationId}/edit`,
-            type: 'GET',
-            success: function(preparation) {
-                checkDnForShipping(preparation.no_dn, true); // true = pakai konfirmasi dulu
-            },
-            error: function() {
-                Swal.fire({ title: 'Error!', text: 'Gagal mengambil data preparation', icon: 'error', confirmButtonColor: '#dc2626' });
-            }
-        });
-    }
 </script>
 @endpush

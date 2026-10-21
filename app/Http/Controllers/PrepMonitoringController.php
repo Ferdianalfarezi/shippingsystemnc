@@ -120,55 +120,41 @@ class PrepMonitoringController extends Controller
             ]);
         }
 
-        // DN yang udah pernah kescan sebelumnya (row manapun) ga boleh discan lagi
-        if (PrepMonitoring::whereJsonContains('scanned_dns', $preparation->no_dn)->exists()) {
+        // DN yang udah pernah kescan sebelumnya (row manapun) ga boleh discan lagi,
+        // KECUALI grupnya ternyata sudah lengkap tapi shipping belum dipilih → tawarkan pilih Shipping
+        $scannedIn = PrepMonitoring::whereJsonContains('scanned_dns', $preparation->no_dn)->first();
+        if ($scannedIn) {
+            $scannedIn->syncSkid();
+
+            if ($this->isWaitingShipping($scannedIn)) {
+                return response()->json([
+                    'success' => true,
+                    'needs_pr_selection' => false,
+                    'data' => $this->groupInfo($preparation, $scannedIn, true),
+                ]);
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'DN ' . $preparation->no_dn . ' sudah pernah discan sebelumnya',
+                'message' => 'DN ' . $preparation->no_dn . ' sudah pernah discan sebelumnya'
+                    . ($scannedIn->status === 'in_progress' ? ' (' . $scannedIn->pr_label . ' ' . $scannedIn->pr_count . '/' . $scannedIn->skid . ')' : ''),
             ]);
         }
 
-        $groupDate = $preparation->delivery_date->format('Y-m-d');
-
-        $existing = PrepMonitoring::where('customers', $preparation->customers)
-            ->where('cycle', $preparation->cycle)
-            ->where('dock', $preparation->dock)
-            ->where('group_date', $groupDate)
-            ->where('status', 'in_progress')
-            ->first();
+        $existing = PrepMonitoring::findInProgress($preparation);
 
         if ($existing) {
+            $existing->syncSkid();
+
             return response()->json([
                 'success' => true,
                 'needs_pr_selection' => false,
-                'data' => [
-                    'no_dn'            => $preparation->no_dn,
-                    'customers'        => $preparation->customers,
-                    'cycle'            => $preparation->cycle,
-                    'dock'             => $preparation->dock,
-                    'route'            => $preparation->route,
-                    'pr_number'        => $existing->pr_number,
-                    'pr_label'         => $existing->pr_label,
-                    'shipping_address' => $existing->shipping_address,
-                    'progress'         => $existing->pr_count . '/' . $existing->skid,
-                    'skid'             => $existing->skid,
-                    // DN ini yang terakhir? → jalur Preparation minta pilih Shipping dulu
-                    'is_last'          => $existing->pr_count + 1 >= $existing->skid,
-                ],
+                'data' => $this->groupInfo($preparation, $existing, $existing->pr_count + 1 >= $existing->skid),
             ]);
         }
 
-        $skid = Preparation::where('customers', $preparation->customers)
-            ->where('cycle', $preparation->cycle)
-            ->where('dock', $preparation->dock)
-            ->whereDate('delivery_date', $groupDate)
-            ->count();
-
-        $kbn = Preparation::where('customers', $preparation->customers)
-            ->where('cycle', $preparation->cycle)
-            ->where('dock', $preparation->dock)
-            ->whereDate('delivery_date', $groupDate)
-            ->sum('qty_kbn');
+        $skid = PrepMonitoring::groupPreparations($preparation)->count();
+        $kbn = PrepMonitoring::groupPreparations($preparation)->sum('qty_kbn');
 
         $shippingAddress = $this->determineShippingAddress($preparation);
 
@@ -224,13 +210,7 @@ class PrepMonitoringController extends Controller
 
             $groupDate = $preparation->delivery_date->format('Y-m-d');
 
-            $monitoring = PrepMonitoring::where('customers', $preparation->customers)
-                ->where('cycle', $preparation->cycle)
-                ->where('dock', $preparation->dock)
-                ->where('group_date', $groupDate)
-                ->where('status', 'in_progress')
-                ->lockForUpdate()
-                ->first();
+            $monitoring = PrepMonitoring::findInProgress($preparation, true);
 
             if (!$monitoring) {
                 if (empty($validated['pr_number'])) {
@@ -241,17 +221,8 @@ class PrepMonitoringController extends Controller
                     ], 422);
                 }
 
-                $skid = Preparation::where('customers', $preparation->customers)
-                    ->where('cycle', $preparation->cycle)
-                    ->where('dock', $preparation->dock)
-                    ->whereDate('delivery_date', $groupDate)
-                    ->count();
-
-                $kbn = Preparation::where('customers', $preparation->customers)
-                    ->where('cycle', $preparation->cycle)
-                    ->where('dock', $preparation->dock)
-                    ->whereDate('delivery_date', $groupDate)
-                    ->sum('qty_kbn');
+                $skid = PrepMonitoring::groupPreparations($preparation)->count();
+                $kbn = PrepMonitoring::groupPreparations($preparation)->sum('qty_kbn');
 
                 $shippingAddress = $this->determineShippingAddress($preparation);
 
@@ -273,16 +244,12 @@ class PrepMonitoringController extends Controller
                     'etd_time'         => $preparation->delivery_time,
                 ]);
             } else {
+                $monitoring->syncSkid();
+
                 $scannedDns   = $monitoring->scanned_dns ?? [];
                 $scannedDns[] = $preparation->no_dn;
 
-                $routes = array_filter(array_unique(array_merge(
-                    array_map('trim', explode(',', $monitoring->route ?? '')),
-                    [$preparation->route]
-                )));
-
                 $monitoring->scanned_dns = $scannedDns;
-                $monitoring->route       = implode(', ', $routes);
                 $monitoring->pr_count   += 1;
                 $monitoring->ship_count += 1;
                 $monitoring->save();
@@ -353,7 +320,38 @@ class PrepMonitoringController extends Controller
                 ], 404);
             }
 
-            if (PrepMonitoring::whereJsonContains('scanned_dns', $preparation->no_dn)->exists()) {
+            $groupDate = $preparation->delivery_date->format('Y-m-d');
+            $shippingAddress = $validated['shipping_address'] ?? null;
+
+            $scannedIn = PrepMonitoring::whereJsonContains('scanned_dns', $preparation->no_dn)->lockForUpdate()->first();
+            if ($scannedIn) {
+                $scannedIn->syncSkid();
+
+                // DN sudah discan & grupnya sudah lengkap tapi shipping belum dipilih → selesaikan grup
+                if ($this->isWaitingShipping($scannedIn)) {
+                    if (empty($shippingAddress)) {
+                        DB::rollBack();
+                        return $this->needsShippingSelection($preparation);
+                    }
+
+                    $monitoring = $scannedIn;
+                    $monitoring->shipping_address = $shippingAddress;
+                    $monitoring->status           = 'ok';
+                    $monitoring->start_ship_at    = Carbon::now();
+                    $monitoring->save();
+
+                    $this->bulkMoveToShipping($monitoring);
+
+                    DB::commit();
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => $monitoring->pr_label . ' SELESAI (' . $monitoring->pr_count . '/' . $monitoring->skid . '). '
+                            . count($monitoring->scanned_dns ?? []) . ' DN dipindahkan ke ' . $monitoring->shipping_address . '!',
+                        'data' => $monitoring->fresh(),
+                    ]);
+                }
+
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
@@ -361,17 +359,7 @@ class PrepMonitoringController extends Controller
                 ], 422);
             }
 
-            $groupDate = $preparation->delivery_date->format('Y-m-d');
-
-            $monitoring = PrepMonitoring::where('customers', $preparation->customers)
-                ->where('cycle', $preparation->cycle)
-                ->where('dock', $preparation->dock)
-                ->where('group_date', $groupDate)
-                ->where('status', 'in_progress')
-                ->lockForUpdate()
-                ->first();
-
-            $shippingAddress = $validated['shipping_address'] ?? null;
+            $monitoring = PrepMonitoring::findInProgress($preparation, true);
 
             if (!$monitoring) {
                 if (empty($validated['pr_number'])) {
@@ -382,11 +370,7 @@ class PrepMonitoringController extends Controller
                     ], 422);
                 }
 
-                $skid = max(Preparation::where('customers', $preparation->customers)
-                    ->where('cycle', $preparation->cycle)
-                    ->where('dock', $preparation->dock)
-                    ->whereDate('delivery_date', $groupDate)
-                    ->count(), 1);
+                $skid = max(PrepMonitoring::groupPreparations($preparation)->count(), 1);
 
                 // Skid cuma 1 → DN pertama sekaligus terakhir, shipping harus dipilih sekarang
                 if ($skid <= 1 && empty($shippingAddress)) {
@@ -394,11 +378,7 @@ class PrepMonitoringController extends Controller
                     return $this->needsShippingSelection($preparation);
                 }
 
-                $kbn = Preparation::where('customers', $preparation->customers)
-                    ->where('cycle', $preparation->cycle)
-                    ->where('dock', $preparation->dock)
-                    ->whereDate('delivery_date', $groupDate)
-                    ->sum('qty_kbn');
+                $kbn = PrepMonitoring::groupPreparations($preparation)->sum('qty_kbn');
 
                 $monitoring = PrepMonitoring::create([
                     'customers'        => $preparation->customers,
@@ -419,6 +399,8 @@ class PrepMonitoringController extends Controller
                     'etd_time'         => $preparation->delivery_time,
                 ]);
             } else {
+                $monitoring->syncSkid();
+
                 // DN terakhir wajib bawa shipping (kecuali grup lama yang shipping-nya sudah terisi)
                 $willComplete = $monitoring->pr_count + 1 >= $monitoring->skid;
                 if ($willComplete && empty($shippingAddress) && empty($monitoring->shipping_address)) {
@@ -429,13 +411,7 @@ class PrepMonitoringController extends Controller
                 $scannedDns   = $monitoring->scanned_dns ?? [];
                 $scannedDns[] = $preparation->no_dn;
 
-                $routes = array_filter(array_unique(array_merge(
-                    array_map('trim', explode(',', $monitoring->route ?? '')),
-                    [$preparation->route]
-                )));
-
                 $monitoring->scanned_dns = $scannedDns;
-                $monitoring->route       = implode(', ', $routes);
                 $monitoring->pr_count   += 1;
                 $monitoring->ship_count += 1;
                 $monitoring->save();
@@ -476,6 +452,33 @@ class PrepMonitoringController extends Controller
                 'message' => 'Gagal memproses scan: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /** Grup in_progress yang semua DN-nya sudah discan tapi shipping belum dipilih. */
+    private function isWaitingShipping(PrepMonitoring $monitoring): bool
+    {
+        return $monitoring->status === 'in_progress'
+            && $monitoring->pr_count >= $monitoring->skid
+            && empty($monitoring->shipping_address);
+    }
+
+    /** Data grup untuk front-end (dipakai checkDn). */
+    private function groupInfo(Preparation $preparation, PrepMonitoring $monitoring, bool $isLast): array
+    {
+        return [
+            'no_dn'            => $preparation->no_dn,
+            'customers'        => $preparation->customers,
+            'cycle'            => $preparation->cycle,
+            'dock'             => $preparation->dock,
+            'route'            => $preparation->route,
+            'pr_number'        => $monitoring->pr_number,
+            'pr_label'         => $monitoring->pr_label,
+            'shipping_address' => $monitoring->shipping_address,
+            'progress'         => $monitoring->pr_count . '/' . $monitoring->skid,
+            'skid'             => $monitoring->skid,
+            // DN ini yang terakhir? → jalur Preparation minta pilih Shipping dulu
+            'is_last'          => $isLast,
+        ];
     }
 
     /** Respon 422 untuk jalur Preparation: DN terakhir, front-end harus munculin modal pilih Shipping. */

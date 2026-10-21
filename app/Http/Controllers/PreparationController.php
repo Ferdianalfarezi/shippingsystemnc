@@ -83,8 +83,15 @@ class PreparationController extends Controller
     // DN yang sudah di-prep tapi grupnya belum selesai (shipping belum dipilih) → [no_dn => "PR 1 · 2/4"]
     $inProgressDns = [];
     foreach (\App\Models\PrepMonitoring::where('status', 'in_progress')->get() as $monitoring) {
+        $monitoring->syncSkid(); // betulkan skid grup lama (sebelum route jadi kunci grup)
+
+        $label = $monitoring->pr_label . ' · ' . $monitoring->pr_count . '/' . $monitoring->skid;
+        if ($monitoring->pr_count >= $monitoring->skid && empty($monitoring->shipping_address)) {
+            $label .= ' · pilih shipping';
+        }
+
         foreach ($monitoring->scanned_dns ?? [] as $dn) {
-            $inProgressDns[$dn] = $monitoring->pr_label . ' · ' . $monitoring->pr_count . '/' . $monitoring->skid;
+            $inProgressDns[$dn] = $label;
         }
     }
 

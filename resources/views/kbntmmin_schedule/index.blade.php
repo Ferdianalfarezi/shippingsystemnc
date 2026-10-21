@@ -157,7 +157,7 @@
                                     <div class="small text-muted" style="font-size: 0.75rem;">P1 {{ $qty['p1'] }} · P2 {{ $qty['p2'] }}</div>
                                 @endif
                             @else
-                                <span class="badge bg-danger" title="Tidak ada data kanban (P1 / P2) untuk route, dock & cycle ini, jadi tidak akan keluar">0 (tidak ada data)</span>
+                                <strong title="Tidak ada data kanban (P1 / P2) untuk route, dock & cycle ini, jadi tidak akan keluar">0</strong>
                             @endif
                         </td>
                         <td><strong>{{ substr($schedule->jam_keluar, 0, 5) }}</strong></td>

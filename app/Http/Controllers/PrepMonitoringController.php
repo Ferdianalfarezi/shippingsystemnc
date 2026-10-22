@@ -374,13 +374,9 @@ class PrepMonitoringController extends Controller
                     ], 422);
                 }
 
+                // Skid 1 → DN pertama sekaligus terakhir. Shipping TIDAK langsung diminta:
+                // grup jadi 1/1 (oranye) dulu, shipping dipilih saat DN-nya diklik/discan lagi.
                 $skid = max(PrepMonitoring::groupPreparations($preparation)->count(), 1);
-
-                // Skid cuma 1 → DN pertama sekaligus terakhir, shipping harus dipilih sekarang
-                if ($skid <= 1 && empty($shippingAddress)) {
-                    DB::rollBack();
-                    return $this->needsShippingSelection($preparation);
-                }
 
                 $kbn = PrepMonitoring::groupPreparations($preparation)->sum('qty_kbn');
 
@@ -422,8 +418,13 @@ class PrepMonitoringController extends Controller
             }
 
             $isComplete = $monitoring->pr_count >= $monitoring->skid;
+            $hasShipping = !empty($shippingAddress) || !empty($monitoring->shipping_address);
 
-            if ($isComplete && $monitoring->status !== 'ok') {
+            // Lengkap tapi shipping belum dipilih (grup skid 1) → tetap in_progress (oranye 1/1),
+            // shipping dipilih saat DN-nya diklik/discan lagi (lihat jalur $scannedIn di atas).
+            $waitingShipping = $isComplete && !$hasShipping;
+
+            if ($isComplete && $hasShipping && $monitoring->status !== 'ok') {
                 if (!empty($shippingAddress)) {
                     $monitoring->shipping_address = $shippingAddress; // manual, bukan Matrix
                 }
@@ -438,13 +439,20 @@ class PrepMonitoringController extends Controller
 
             DB::commit();
 
+            if ($waitingShipping) {
+                $message = 'DN ' . $preparation->no_dn . ' masuk ' . $monitoring->pr_label . '. Progress: '
+                    . $monitoring->pr_count . '/' . $monitoring->skid . '. Klik/scan DN ini lagi untuk pilih Shipping.';
+            } elseif ($isComplete) {
+                $message = $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . '). '
+                    . count($monitoring->scanned_dns ?? []) . ' DN dipindahkan ke ' . $monitoring->shipping_address . '!';
+            } else {
+                $message = 'DN ' . $preparation->no_dn . ' masuk ' . $monitoring->pr_label . '. Progress: '
+                    . $monitoring->pr_count . '/' . $monitoring->skid . '. Shipping dipilih setelah DN terakhir.';
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => $isComplete
-                    ? $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . '). '
-                        . count($monitoring->scanned_dns ?? []) . ' DN dipindahkan ke ' . $monitoring->shipping_address . '!'
-                    : 'DN ' . $preparation->no_dn . ' masuk ' . $monitoring->pr_label . '. Progress: '
-                        . $monitoring->pr_count . '/' . $monitoring->skid . '. Shipping dipilih setelah DN terakhir.',
+                'message' => $message,
                 'data' => $monitoring->fresh(),
             ]);
 

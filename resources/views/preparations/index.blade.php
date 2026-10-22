@@ -580,19 +580,12 @@
             // Simpan dulu, karena event hidden di bawah me-reset state modal PR
             const noDn = pendingNoDn;
             const prNumber = selectedPrNumber;
-            const skid = pendingSkid;
 
             bootstrap.Modal.getInstance(document.getElementById('selectPrShippingModal')).hide();
 
-            if (skid !== null && skid <= 1) {
-                // Skid cuma 1 → DN pertama sekaligus terakhir, langsung pilih Shipping
-                openShippingModal(noDn, prNumber, `
-                    <strong>DN:</strong> ${noDn}<br>
-                    Skid cuma 1, jadi DN ini langsung selesai. Pilih Shipping tujuannya.
-                `);
-            } else {
-                executeScanDirect(noDn, prNumber, null);
-            }
+            // Skid 1 juga tidak langsung pilih Shipping: jadi 1/1 (oranye) dulu,
+            // shipping dipilih saat DN-nya diklik/discan lagi
+            executeScanDirect(noDn, prNumber, null);
         });
 
         $('#selectPrShippingModal').on('hidden.bs.modal', function() {

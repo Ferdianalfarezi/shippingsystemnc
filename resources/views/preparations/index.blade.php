@@ -437,12 +437,12 @@
 
                 const d = response.data;
 
-                // DN terakhir grup yang shipping-nya belum dipilih → langsung modal pilih Shipping
+                // Grup sudah lengkap (mis. 4/4) & shipping belum dipilih, DN-nya diklik lagi → modal pilih Shipping
                 const needsShipping = d.is_last && !d.shipping_address;
                 const proceed = function() {
                     if (needsShipping) {
                         openShippingModal(noDn, null, `
-                            <strong>DN terakhir:</strong> ${d.no_dn}<br>
+                            <strong>DN:</strong> ${d.no_dn}<br>
                             <strong>Route:</strong> ${d.route} | <strong>Dock:</strong> ${d.dock} | <strong>Cycle:</strong> ${d.cycle}<br>
                             <strong>${d.pr_label}</strong> → selesai ${d.skid}/${d.skid}. Semua DN grup ini akan dipindah ke Shipping yang dipilih.
                         `);
@@ -453,7 +453,7 @@
 
                 if (withConfirm) {
                     Swal.fire({
-                        title: needsShipping ? 'DN terakhir, lanjut pilih Shipping?' : 'Masukkan ke ' + d.pr_label + '?',
+                        title: needsShipping ? d.pr_label + ' sudah lengkap (' + d.progress + '), pilih Shipping?' : 'Masukkan ke ' + d.pr_label + '?',
                         html: `
                             <div class="text-start">
                                 <small><strong>DN:</strong> ${d.no_dn}</small><br>
@@ -515,10 +515,10 @@
                 });
             },
             error: function(xhr) {
-                // Server bilang ini DN terakhir & shipping belum dipilih → munculin modal Shipping
+                // Server bilang grup sudah lengkap & shipping belum dipilih → munculin modal Shipping
                 if (xhr.responseJSON?.needs_shipping_selection) {
                     openShippingModal(noDn, prNumber, `
-                        <strong>DN terakhir:</strong> ${noDn}<br>
+                        <strong>DN:</strong> ${noDn}<br>
                         Semua DN grup ini akan dipindah ke Shipping yang dipilih.
                     `);
                     return;

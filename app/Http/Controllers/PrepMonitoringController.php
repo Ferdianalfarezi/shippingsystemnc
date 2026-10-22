@@ -153,7 +153,9 @@ class PrepMonitoringController extends Controller
             return response()->json([
                 'success' => true,
                 'needs_pr_selection' => false,
-                'data' => $this->groupInfo($preparation, $existing, $existing->pr_count + 1 >= $existing->skid),
+                // DN baru di grup yang masih jalan → cukup tambah progress (termasuk DN terakhir),
+                // shipping baru diminta saat DN yang sudah discan diklik lagi
+                'data' => $this->groupInfo($preparation, $existing, false),
             ]);
         }
 
@@ -401,13 +403,8 @@ class PrepMonitoringController extends Controller
             } else {
                 $monitoring->syncSkid();
 
-                // DN terakhir wajib bawa shipping (kecuali grup lama yang shipping-nya sudah terisi)
-                $willComplete = $monitoring->pr_count + 1 >= $monitoring->skid;
-                if ($willComplete && empty($shippingAddress) && empty($monitoring->shipping_address)) {
-                    DB::rollBack();
-                    return $this->needsShippingSelection($preparation);
-                }
-
+                // DN terakhir TIDAK langsung minta shipping: grup jadi n/n (oranye) dulu,
+                // shipping dipilih saat salah satu DN grup ini diklik/discan lagi.
                 $scannedDns   = $monitoring->scanned_dns ?? [];
                 $scannedDns[] = $preparation->no_dn;
 
@@ -441,13 +438,13 @@ class PrepMonitoringController extends Controller
 
             if ($waitingShipping) {
                 $message = 'DN ' . $preparation->no_dn . ' masuk ' . $monitoring->pr_label . '. Progress: '
-                    . $monitoring->pr_count . '/' . $monitoring->skid . '. Klik/scan DN ini lagi untuk pilih Shipping.';
+                    . $monitoring->pr_count . '/' . $monitoring->skid . '. Klik/scan salah satu DN grup ini untuk pilih Shipping.';
             } elseif ($isComplete) {
                 $message = $monitoring->pr_label . ' SELESAI (' . $monitoring->skid . '/' . $monitoring->skid . '). '
                     . count($monitoring->scanned_dns ?? []) . ' DN dipindahkan ke ' . $monitoring->shipping_address . '!';
             } else {
                 $message = 'DN ' . $preparation->no_dn . ' masuk ' . $monitoring->pr_label . '. Progress: '
-                    . $monitoring->pr_count . '/' . $monitoring->skid . '. Shipping dipilih setelah DN terakhir.';
+                    . $monitoring->pr_count . '/' . $monitoring->skid . '. Shipping dipilih setelah semua DN grup ini di-prep.';
             }
 
             return response()->json([
@@ -475,7 +472,7 @@ class PrepMonitoringController extends Controller
     }
 
     /** Data grup untuk front-end (dipakai checkDn). */
-    private function groupInfo(Preparation $preparation, PrepMonitoring $monitoring, bool $isLast): array
+    private function groupInfo(Preparation $preparation, PrepMonitoring $monitoring, bool $needsShipping): array
     {
         return [
             'no_dn'            => $preparation->no_dn,
@@ -488,8 +485,8 @@ class PrepMonitoringController extends Controller
             'shipping_address' => $monitoring->shipping_address,
             'progress'         => $monitoring->pr_count . '/' . $monitoring->skid,
             'skid'             => $monitoring->skid,
-            // DN ini yang terakhir? → jalur Preparation minta pilih Shipping dulu
-            'is_last'          => $isLast,
+            // true = grup sudah lengkap & DN ini diklik lagi → front-end munculin modal pilih Shipping
+            'is_last'          => $needsShipping,
         ];
     }
 
@@ -499,7 +496,7 @@ class PrepMonitoringController extends Controller
         return response()->json([
             'success' => false,
             'needs_shipping_selection' => true,
-            'message' => 'DN ' . $preparation->no_dn . ' adalah DN terakhir. Pilih Shipping terlebih dahulu.',
+            'message' => 'DN ' . $preparation->no_dn . '. Grup ini sudah lengkap, pilih Shipping terlebih dahulu.',
         ], 422);
     }
 

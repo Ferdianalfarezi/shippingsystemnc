@@ -222,7 +222,6 @@
                     <th>Delv Date</th>
                     <th>Delv Time</th>
                     <th>Cyc</th>
-                    <th>Qty Kbn</th>
                     <th>Pull Date</th>
                     <th>Finish Pulling</th>
                     <th>Status</th>
@@ -240,7 +239,6 @@
                         <td>{{ $prep->delivery_date->format('d-m-y') }}</td>
                         <td>{{ date('H:i:s', strtotime($prep->delivery_time)) }}</td>
                         <td><strong>{{ $prep->cycle }}</strong></td>
-                        <td>{{ $prep->qty_kbn ?? '-' }}</td>
                         <td>{{ $prep->pulling_date->format('d-m-y') }}</td>
                         <td>{{ date('H:i:s', strtotime($prep->pulling_time)) }}</td>
                         <td>

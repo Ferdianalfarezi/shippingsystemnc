@@ -27,12 +27,11 @@ class PrepMonitoringController extends Controller
     }
 
     /**
-     * Semua row monitoring yang BELUM diambil milkrun, sudah ditempel status Delivery.
-     * Row hilang dari tabel begitu SEMUA DN-nya sudah diambil, yaitu:
+     * Row monitoring yang grupnya masih di area (semua DN di Preparation/Shipping),
+     * sudah ditempel status Delivery. Row hilang begitu SALAH SATU DN-nya:
+     * - sudah tidak ada di Preparation & Shipping (pindah ke Delivery/History, atau dihapus), ATAU
      * - masuk tabel milkruns (no_dns), ATAU
-     * - sudah scan to delivery (ada di Delivery / History). Milkrun cuma dibikin
-     *   kalau shipping-nya punya arrival, jadi banyak DN yang udah jalan tapi
-     *   gak pernah tercatat di milkruns.
+     * - sudah scan to delivery.
      */
     private function pendingRows()
     {
@@ -49,17 +48,32 @@ class PrepMonitoringController extends Controller
             }
         }
 
-        $rows = $rows->filter(function ($row) use ($taken) {
+        // DN yang masih "di area": ada di Preparation atau Shipping
+        $allDns = $rows->pluck('scanned_dns')->filter()->flatten()->unique()->values()->all();
+        $inArea = [];
+        foreach (array_chunk($allDns, 500) as $chunk) {
+            foreach (Preparation::query()->toBase()->whereIn('no_dn', $chunk)->pluck('no_dn') as $dn) {
+                $inArea[$dn] = true;
+            }
+            foreach (Shipping::query()->toBase()->whereIn('no_dn', $chunk)->pluck('no_dn') as $dn) {
+                $inArea[$dn] = true;
+            }
+        }
+
+        $rows = $rows->filter(function ($row) use ($taken, $inArea) {
             $dns = $row->scanned_dns ?? [];
             if (empty($dns)) {
                 return true;
             }
+            // Baris tampil cuma selama SEMUA DN grup masih di Preparation/Shipping dan belum berangkat.
+            // Begitu salah satu DN sudah pindah (Delivery/History), dihapus, masuk milkrun,
+            // atau sudah scan to delivery → baris hilang dari dashboard.
             foreach ($dns as $dn) {
-                if (!isset($taken[$dn])) {
-                    return true; // masih ada DN yang belum diambil milkrun
+                if (!isset($inArea[$dn]) || isset($taken[$dn])) {
+                    return false;
                 }
             }
-            return false;
+            return true;
         })
         // Urut ETD terdekat dulu (tanggal grup + jam ETD); yang sudah lewat otomatis paling atas
         ->sortBy(fn ($row) => ($row->group_date ? $row->group_date->format('Y-m-d') : '9999-12-31')

@@ -987,8 +987,16 @@ class ShippingController extends Controller
         ]);
 
         try {
-            $shipping->update($validated);
-            
+            // Nilai lama, buat menyamakan dashboard (grup prep monitoring) setelah diedit
+            $oldNoDn = $shipping->no_dn;
+            $before = $shipping->only(['customers', 'route', 'dock', 'cycle', 'delivery_time', 'address']);
+            $before['delivery_date'] = optional($shipping->delivery_date)->format('Y-m-d');
+
+            DB::transaction(function () use ($shipping, $validated, $oldNoDn, $before) {
+                $shipping->update($validated);
+                app(\App\Services\PrepMonitoringSync::class)->afterDnEdited($oldNoDn, $before, $validated);
+            });
+
             if ($request->ajax()) {
                 return response()->json([
                     'success' => true,

@@ -188,8 +188,16 @@ class PreparationController extends Controller
         ]);
 
         try {
-            $preparation->update($validated);
-            
+            // Nilai lama, buat menyamakan dashboard (grup prep monitoring) setelah diedit
+            $oldNoDn = $preparation->no_dn;
+            $before = $preparation->only(['customers', 'route', 'dock', 'cycle', 'delivery_time']);
+            $before['delivery_date'] = optional($preparation->delivery_date)->format('Y-m-d');
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($preparation, $validated, $oldNoDn, $before) {
+                $preparation->update($validated);
+                app(\App\Services\PrepMonitoringSync::class)->afterDnEdited($oldNoDn, $before, $validated);
+            });
+
             // Jika request AJAX, return JSON
             if ($request->ajax()) {
                 return response()->json([

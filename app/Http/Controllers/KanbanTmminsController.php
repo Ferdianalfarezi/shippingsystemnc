@@ -183,8 +183,8 @@ class KanbanTmminsController extends Controller
                             $lastValidRoute = $route;
                         }
 
-                        $pcs = $this->extractPcs($d1);
-                        $part_name = $this->extractPartName($d1);
+                        $pcs = $this->extractPcs($d1, $group['D1raw'] ?? null);
+                        $part_name = $this->extractPartName($d1, $group['D1raw'] ?? null);
                         $dock = $this->extractDock($d1, $dockCode);
                         $unique_no = $this->extractUniqueNo($d1, $manifestNo);
                         $plo = $this->extractPlo($d1, $dockCode, $route);
@@ -790,8 +790,16 @@ class KanbanTmminsController extends Controller
     /**
      * Extract pcs from D1
      */
-    private function extractPcs($d1)
+    private function extractPcs($d1, $d1Raw = null)
     {
+        // Kolom asli [16] = pcs/kanban (posisi tetap)
+        if (is_array($d1Raw)) {
+            $v = trim($d1Raw[16] ?? '');
+            if (ctype_digit($v) && (int) $v >= 1 && (int) $v <= 9999) {
+                return (int) $v;
+            }
+        }
+
         $pcs = 0;
         if (isset($d1[13]) && is_numeric($d1[13]) && $d1[13] >= 1 && $d1[13] <= 9999) {
             $pcs = (int) $d1[13];
@@ -802,8 +810,16 @@ class KanbanTmminsController extends Controller
     /**
      * Extract part_name from D1
      */
-    private function extractPartName($d1)
+    private function extractPartName($d1, $d1Raw = null)
     {
+        // Kolom asli [23] = part name (posisi tetap, tidak terpengaruh kolom kosong/ekstra)
+        if (is_array($d1Raw)) {
+            $v = trim($d1Raw[23] ?? '');
+            if ($v !== '' && $v !== 'D' && !ctype_digit($v)) {
+                return $v;
+            }
+        }
+
         $part_name = trim($d1[18] ?? '');
         if ($part_name === '' || $part_name === 'D') {
             $part_name = trim($d1[17] ?? '');

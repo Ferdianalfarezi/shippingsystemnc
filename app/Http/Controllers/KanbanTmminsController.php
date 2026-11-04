@@ -194,7 +194,7 @@ class KanbanTmminsController extends Controller
                         $finalPcs = ($addressData['qty'] > 0) ? $addressData['qty'] : $pcs;
 
                         $cycle = $this->extractCycle($d1, $route);
-                        $conveyance_no = $this->extractConveyanceNo($d1);
+                        $conveyance_no = $this->extractConveyanceNo($d1, $group['D1raw'] ?? null);
 
                         Log::info("Creating record - Part No: {$part_no}, Address: {$address}");
                         
@@ -1066,8 +1066,15 @@ class KanbanTmminsController extends Controller
     /**
      * Extract conveyance_no from D1
      */
-    private function extractConveyanceNo($d1)
+    private function extractConveyanceNo($d1, $d1Raw = null)
     {
+        // Kolom asli [62] = conveyance no (F / O / H / A ..., boleh kosong) — sama dengan parser P2.
+        // Jangan fallback ke kolom lain: kosong memang valid (mis. dock 4P).
+        if (is_array($d1Raw) && count($d1Raw) > 62) {
+            $v = trim($d1Raw[62]);
+            return $v !== '' ? substr($v, 0, 25) : null;
+        }
+
         $conveyance_no = null;
         
         $checkColumns = [41, 42, 43];

@@ -125,6 +125,8 @@ class KanbanTmminsController extends Controller
                             }
                             $dataGroups[$currentManifestNo][] = [
                                 'D1' => $currentD1,
+                                // Kolom asli tanpa menggabung tab kosong → posisi kolom selalu tetap
+                                'D1raw' => explode("\t", rtrim($line, "\r\n")),
                                 'D2' => []
                             ];
                         }
@@ -171,7 +173,7 @@ class KanbanTmminsController extends Controller
                         $customer_address = $this->extractCustomerAddress($d1);
                         $dockCode = $this->extractDockCode($d1);
 
-                        $times = $this->extractTimes($d1, $dockCode);
+                        $times = $this->extractTimes($d1, $dockCode, $group['D1raw'] ?? null);
                         $departure_time = $times['departure_time'];
                         $arrival_time = $times['arrival_time'];
                         $out_time = $times['out_time'];
@@ -584,6 +586,9 @@ class KanbanTmminsController extends Controller
         if ($value === null) return false;
         $clean = trim((string) $value);
         if ($clean === '') return false;
+        // Wajib tanggal + jam lengkap (YYYY-MM-DD HH:MM). Tanpa ini strtotime()
+        // menganggap teks seperti "D" / "A" (kode zona waktu) = waktu sekarang.
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/', $clean)) return false;
         $ts = strtotime($clean);
         return ($ts !== false && $ts > strtotime('1990-01-01') && $ts < strtotime('+2 years'));
     }
@@ -653,8 +658,35 @@ class KanbanTmminsController extends Controller
      * geser. now() hanya dipakai kalau benar-benar tidak ada satupun kolom
      * berpola datetime yang ditemukan di seluruh baris.
      */
-    private function extractTimes($d1, $dockCode)
+    private function extractTimes($d1, $dockCode, $d1Raw = null)
     {
+        // Utama: baca dari kolom asli (posisi tetap di format TXT TMMIN):
+        // [25] departure, [26] jam berikutnya, [36] waktu blok kedua (dock non-4P).
+        if (is_array($d1Raw)) {
+            $raw = function ($idx) use ($d1Raw) {
+                $v = trim(preg_replace('/\.\d{1,6}$/', '', (string) ($d1Raw[$idx] ?? '')));
+                return $this->isValidDateTime($v) ? date('Y-m-d H:i:s', strtotime($v)) : null;
+            };
+
+            $dep = $raw(25);
+            if ($dep !== null) {
+                if (strtoupper($dockCode) === '4P') {
+                    return [
+                        'departure_time' => $dep,
+                        'arrival_time' => $raw(26) ?? date('Y-m-d H:i:s', strtotime($dep . ' +4 hours')),
+                        'out_time' => null,
+                    ];
+                }
+
+                return [
+                    'departure_time' => $dep,
+                    'arrival_time' => $raw(36) ?? $raw(26) ?? date('Y-m-d H:i:s', strtotime($dep . ' +4 hours')),
+                    'out_time' => $raw(26),
+                ];
+            }
+        }
+
+        // Cadangan (format tidak dikenal): cara lama, scan kolom di sekitar posisi
         $departure_time = now();
         $arrival_time = now();
         $out_time = now();
